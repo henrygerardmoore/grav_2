@@ -7,7 +7,7 @@ use bevy::{
         render_asset::RenderAssetUsages,
         render_resource::{Extent3d, TextureDimension, TextureFormat},
     },
-    window::{Cursor, CursorGrabMode, PrimaryWindow},
+    window::{Cursor, PrimaryWindow},
 };
 
 pub struct GravPlugin;
@@ -240,10 +240,8 @@ fn capture_or_release_cursor(
     if frames.0 >= 6 {
         let mut primary_window = window.single_mut();
         if primary_window.focused {
-            primary_window.cursor.grab_mode = CursorGrabMode::Locked;
             primary_window.cursor.visible = false;
         } else {
-            primary_window.cursor.grab_mode = CursorGrabMode::None;
             primary_window.cursor.visible = true;
             paused.0 = true;
         }
