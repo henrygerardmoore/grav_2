@@ -1,6 +1,6 @@
 use bevy::{
     core::FrameCount,
-    input::mouse::MouseMotion,
+    input::mouse::{MouseMotion, MouseWheel},
     math::NormedVectorSpace,
     prelude::*,
     render::{
@@ -13,6 +13,8 @@ pub struct GravPlugin;
 const G: f32 = 8.;
 const MOUSE_SENSITIVITY: f32 = 0.002; // ?
 const CAMERA_SPEED: f32 = 5.; // m/s
+const SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY: f32 = 1.;
+const SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY: f32 = 1.;
 
 fn main() {
     App::new()
@@ -48,6 +50,8 @@ fn main() {
             )
                 .chain(),
         )
+        .insert_resource(BodySpawningOptions::default())
+        .add_systems(Update, mouse_button_input)
         .add_systems(Update, capture_or_release_cursor)
         .add_systems(Update, exit_system)
         .add_systems(Update, rotate_camera)
@@ -55,7 +59,12 @@ fn main() {
         .run();
 }
 
-fn capture_or_release_cursor(mut window: Query<&mut Window, With<PrimaryWindow>>, frames: Res<FrameCount>) {
+// TODO(henrygerardmoore): implement reset button
+
+fn capture_or_release_cursor(
+    mut window: Query<&mut Window, With<PrimaryWindow>>,
+    frames: Res<FrameCount>,
+) {
     // https://github.com/bevyengine/bevy/issues/16238
     // wait for a bit before capturing the cursor
     if frames.0 >= 6 {
@@ -84,7 +93,102 @@ fn rotate_camera(
     }
 }
 
-fn move_camera(keys: Res<ButtonInput<KeyCode>>, mut camera: Query<&mut Transform, With<Camera>>, time: Res<Time>) {
+#[derive(Clone, Copy, PartialEq)]
+enum SpawnSelectionMode {
+    NONE,
+    SIZE,
+    SPEED,
+    FIRE,
+}
+
+impl Default for SpawnSelectionMode {
+    fn default() -> Self {
+        Self::NONE
+    }
+}
+
+#[derive(Resource, Clone, Copy, Default)]
+struct BodySpawningOptions {
+    mode: SpawnSelectionMode,
+    size: f32,
+    speed: f32,
+}
+
+fn mouse_button_input(
+    buttons: Res<ButtonInput<MouseButton>>,
+    camera: Query<&Transform, With<Camera>>,
+    mut spawn_options: ResMut<BodySpawningOptions>,
+    mut evr_scroll: EventReader<MouseWheel>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for ev in evr_scroll.read() {
+        match spawn_options.mode {
+            SpawnSelectionMode::NONE => continue,
+            SpawnSelectionMode::SIZE => spawn_options.size += ev.y * SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY,
+            SpawnSelectionMode::SPEED => spawn_options.speed += ev.y * SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY,
+            SpawnSelectionMode::FIRE => continue,
+        }
+    }
+    spawn_options.size = spawn_options.size.clamp(0., 5.);
+    spawn_options.speed = spawn_options.speed.clamp(0., 5.);
+    if buttons.just_pressed(MouseButton::Left) {
+        spawn_options.mode = SpawnSelectionMode::SPEED;
+    }
+    if buttons.just_pressed(MouseButton::Right) {
+        spawn_options.mode = SpawnSelectionMode::SIZE;
+    }
+    if buttons.just_pressed(MouseButton::Middle) {
+        spawn_options.mode = SpawnSelectionMode::FIRE;
+    }
+
+    //TODO(henrygerardmoore): display current options on screen
+
+    // check if we need to spawn
+    if spawn_options.mode == SpawnSelectionMode::FIRE {
+        // TODO(henrygerardmoore): extract spawns from this and initial_spawn to separate function 
+        let mesh_id = match meshes.ids().collect::<Vec<_>>().first() {
+            Some(x) => *x,
+            None => panic!("No mesh loaded!"),
+        };
+        let mesh_handle = match meshes.get_strong_handle(mesh_id) {
+            Some(x) => x,
+            None => panic!("No mesh found with the ID we just got :thinking:")
+        };
+
+        let material_id = match materials.ids().collect::<Vec<_>>().first() {
+            Some(x) => *x,
+            None => panic!("No mesh loaded!"),
+        };
+        let material_handle = match materials.get_strong_handle(material_id) {
+            Some(x) => x,
+            None => panic!("No mesh found with the ID we just got :thinking:")
+        };
+        spawn_options.mode = SpawnSelectionMode::NONE;
+        let tf = camera.single();
+        commands.spawn((
+            Body { mass: spawn_options.size },
+            Position(Vec3 {
+                x: tf.translation.x,
+                y: tf.translation.y,
+                z: tf.translation.z,
+            }),
+            Velocity(tf.forward() * spawn_options.speed),
+            PbrBundle {
+                mesh: mesh_handle.clone(),
+                material: material_handle.clone(),
+                ..default()
+            },
+        ));
+    }
+}
+
+fn move_camera(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut camera: Query<&mut Transform, With<Camera>>,
+    time: Res<Time>,
+) {
     let motion_distance = time.delta_seconds() * CAMERA_SPEED;
     let mut transform = camera.single_mut();
     let mut net_translation = Vec3::ZERO;
@@ -226,8 +330,12 @@ fn get_radius(body: Body) -> f32 {
 }
 
 // sum gravitational forces on bodies to arrive at their acceleration, euler integrate acceleration to modify velocity
-fn update_body_velocities(mut query: Query<(&Body, &Position, &mut Velocity)>, time: Res<Time>, paused: Res<TimePaused>) {
-    let dt = if paused.0 {0.} else {time.delta_seconds()};
+fn update_body_velocities(
+    mut query: Query<(&Body, &Position, &mut Velocity)>,
+    time: Res<Time>,
+    paused: Res<TimePaused>,
+) {
+    let dt = if paused.0 { 0. } else { time.delta_seconds() };
     let mut query_next = query.iter_combinations_mut();
     while let Some([(body1, &p1, mut v1), (body2, &p2, mut v2)]) = query_next.fetch_next() {
         let m1 = body1.mass;
@@ -243,8 +351,12 @@ fn update_body_velocities(mut query: Query<(&Body, &Position, &mut Velocity)>, t
 }
 
 // euler integrate body velocities to update body positions
-fn update_body_positions(mut query: Query<(&mut Position, &Velocity)>, time: Res<Time>, paused: Res<TimePaused>) {
-    let dt = if paused.0 {0.} else {time.delta_seconds()};
+fn update_body_positions(
+    mut query: Query<(&mut Position, &Velocity)>,
+    time: Res<Time>,
+    paused: Res<TimePaused>,
+) {
+    let dt = if paused.0 { 0. } else { time.delta_seconds() };
     query.iter_mut().for_each(|(mut position, velocity)| {
         position.0.x += velocity.0.x * dt;
         position.0.y += velocity.0.y * dt;
@@ -253,6 +365,7 @@ fn update_body_positions(mut query: Query<(&mut Position, &Velocity)>, time: Res
 }
 
 // combine colliding bodies into one
+//TODO(henrygerardmoore): debug collisions
 fn resolve_body_collisions(
     mut query: Query<(Entity, &mut Body, &mut Position, &mut Velocity)>,
     mut commands: Commands,
