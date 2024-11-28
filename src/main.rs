@@ -72,7 +72,7 @@ fn main() {
         .add_systems(Update, reset_camera)
         .add_systems(Update, update_osd)
         .add_systems(Startup, spawn_help)
-        .add_systems(Startup, show_hide_help)
+        .add_systems(Update, show_hide_help)
         .run();
 }
 
@@ -99,9 +99,13 @@ fn spawn_help(mut commands: Commands) {
             HelpUI,
             NodeBundle {
                 background_color: Color::BLACK.into(),
-                visibility: Visibility::Hidden,
-                inherited_visibility: InheritedVisibility::HIDDEN,
+                visibility: Visibility::Visible, // start visible so user sees the help screen
                 z_index: ZIndex::Global(i32::MAX),
+                style: Style {
+                    right: Val::Percent(100.),
+                    padding: UiRect::all(Val::Px(5.0)),
+                    ..default()
+                },
                 ..default()
             },
         ))
@@ -110,24 +114,26 @@ fn spawn_help(mut commands: Commands) {
                 TextBundle::from_sections([
                     text_section(Color::WHITE.into(), "Controls"),
                     text_section(Color::WHITE.into(), "Controls"),
+                    text_section(Color::WHITE.into(), "\nH to toggle the help"),
+                    text_section(Color::WHITE.into(), "\nWASD to move laterally"),
+                    text_section(Color::WHITE.into(), "\nMouse to look"),
+                    text_section(Color::WHITE.into(), "\nP  to look"),
                 ]),
                 HelpText,
             ));
         });
 }
 
-// TODO(henrygerardmoore): add 'h' key to display controls
 fn show_hide_help(
-    mut query: Query<&mut ViewVisibility, With<SpawnUI>>,
+    mut query: Query<&mut Visibility, With<HelpUI>>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     if keys.just_pressed(KeyCode::KeyH) {
         // show help
-        query.single_mut().set();
-    }
-    if keys.just_released(KeyCode::KeyH) {
-        // hide help
-        // query.single_mut().
+        *query.single_mut() = match *query.single_mut() {
+            Visibility::Hidden => Visibility::Visible,
+            _ => Visibility::Hidden,
+        };
     }
 }
 
@@ -150,7 +156,7 @@ fn create_osd(mut commands: Commands) {
                     ..default()
                 },
                 z_index: ZIndex::Global(i32::MAX - 1),
-                background_color: Color::WHITE.with_alpha(0.75).into(),
+                background_color: Color::WHITE.with_alpha(0.5).into(),
                 ..default()
             },
             SpawnUI,
@@ -325,7 +331,10 @@ fn mouse_button_input(
             SpawnSelectionMode::FIRE => continue,
         }
     }
-    spawn_options.radius = spawn_options.radius.clamp(SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY / SPEED_MOD_FACTOR, SPAWN_SIZE_MAX);
+    spawn_options.radius = spawn_options.radius.clamp(
+        SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY / SPEED_MOD_FACTOR,
+        SPAWN_SIZE_MAX,
+    );
     spawn_options.speed = spawn_options.speed.clamp(0., SPAWN_SPEED_MAX);
     if buttons.just_pressed(MouseButton::Left) {
         spawn_options.mode = SpawnSelectionMode::SPEED;
