@@ -1,6 +1,12 @@
 use crate::components::{Body, Position, Velocity};
-use bevy::{prelude::*, render::{render_asset::RenderAssetUsages, render_resource::{Extent3d, TextureDimension, TextureFormat}}};
 use crate::resources::SphereInfo;
+use bevy::{
+    prelude::*,
+    render::{
+        render_asset::RenderAssetUsages,
+        render_resource::{Extent3d, TextureDimension, TextureFormat},
+    },
+};
 
 pub fn get_radius(body: Body) -> f32 {
     body.mass.cbrt() * get_default_sphere_radius()

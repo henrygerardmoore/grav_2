@@ -6,9 +6,12 @@ use bevy::{
     window::{CursorGrabMode, PrimaryWindow},
 };
 
-use crate::{components::{Body, HelpText, HelpUI, Position, SpawnText, SpawnUI, Velocity}, helpers::{body_bundle, uv_debug_texture}};
 use crate::helpers::{get_mass, get_radius};
 use crate::resources::{BodySpawningOptions, SpawnSelectionMode, SphereInfo, TimePaused, TimeRate};
+use crate::{
+    components::{Body, HelpText, HelpUI, Position, SpawnText, SpawnUI, Velocity},
+    helpers::{body_bundle, uv_debug_texture},
+};
 
 // TODO(henrygerardmoore): add loadable config file that controls below consts (as well as full screen/resolution, etc.) through a `Resource`
 const G: f32 = 8.;
@@ -97,10 +100,7 @@ pub fn spawn_help(mut commands: Commands) {
                             ..default()
                         },
                     ),
-                    text_section(
-                        Color::WHITE,
-                        "\nF or click middle mouse to spawn a body",
-                    ),
+                    text_section(Color::WHITE, "\nF or click middle mouse to spawn a body"),
                     text_section(
                         Color::WHITE,
                         "\nScroll mouse wheel to modify selected spawn option",
@@ -116,14 +116,8 @@ pub fn spawn_help(mut commands: Commands) {
                         },
                     ),
                     text_section(Color::WHITE, "\nP to pause time"),
-                    text_section(
-                        Color::WHITE,
-                        "\nEquals key to increase simulation rate",
-                    ),
-                    text_section(
-                        Color::WHITE,
-                        "\nHyphen key to decrease simulation rate",
-                    ),
+                    text_section(Color::WHITE, "\nEquals key to increase simulation rate"),
+                    text_section(Color::WHITE, "\nHyphen key to decrease simulation rate"),
                 ])
                 .with_text_justify(JustifyText::Center),
                 HelpText,
