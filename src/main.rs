@@ -38,8 +38,10 @@ fn main() {
         // make the background look like space
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(TimePaused(false))
+        .insert_resource(SphereInfo::default())
         .add_systems(Update, pause_time)
-        .add_systems(Startup, (initial_spawn, camera_spawn))
+        .add_systems(Startup, (create_sphere_info, initial_spawn).chain())
+        .add_systems(Startup, camera_spawn)
         .add_systems(
             Update,
             (
@@ -56,10 +58,24 @@ fn main() {
         .add_systems(Update, exit_system)
         .add_systems(Update, rotate_camera)
         .add_systems(Update, move_camera)
+        .add_systems(Update, reset_sim)
         .run();
 }
 
-// TODO(henrygerardmoore): implement reset button
+fn reset_sim(
+    keys: Res<ButtonInput<KeyCode>>,
+    query: Query<Entity, With<Body>>,
+    mut commands: Commands,
+    sphere_info : Res<SphereInfo>
+) {
+    if keys.just_pressed(KeyCode::KeyR) {
+        let mut entity_iter = query.iter();
+        while let Some(entity) = entity_iter.next() {
+            commands.entity(entity).despawn();
+        }
+        initial_spawn(commands, sphere_info);
+    }
+}
 
 fn capture_or_release_cursor(
     mut window: Query<&mut Window, With<PrimaryWindow>>,
@@ -133,9 +149,7 @@ fn mouse_button_input(
     mut spawn_options: ResMut<BodySpawningOptions>,
     mut evr_scroll: EventReader<MouseWheel>,
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut images: ResMut<Assets<Image>>,
+    sphere_info : Res<SphereInfo>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     for ev in evr_scroll.read() {
@@ -179,9 +193,7 @@ fn mouse_button_input(
                 z: tf.translation.z,
             },
             tf.forward() * spawn_options.speed,
-            &mut meshes,
-            &mut images,
-            &mut materials,
+            &sphere_info
         ));
     }
 }
@@ -270,53 +282,49 @@ struct Position(Vec3);
 #[derive(Component, Clone, Copy)]
 struct Velocity(Vec3);
 
+#[derive(Resource, Clone, Default)]
+struct SphereInfo(Handle<Mesh>, Handle<StandardMaterial>);
+
+fn create_sphere_info(
+    mut sphere_info : ResMut<SphereInfo>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut images: ResMut<Assets<Image>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,) {
+    let mesh_handle = meshes.add(Sphere { radius: 1. }.mesh().uv(32, 18));
+    let material_handle = materials.add(StandardMaterial {
+        base_color_texture: Some(images.add(uv_debug_texture())),
+        ..default()
+    });
+    sphere_info.0 = mesh_handle;
+    sphere_info.1 = material_handle;
+}
 
 // TODO(henrygerardmoore): fix debug texture and extract mesh addition to other function
 fn body_bundle(
     mass: f32,
     position: Vec3,
     velocity: Vec3,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    images: &mut ResMut<Assets<Image>>,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
+    sphere_info : &Res<SphereInfo>,
 ) -> impl Bundle {
     // get or add the mesh handle
-    let mesh_handle = match meshes.ids().collect::<Vec<_>>().first() {
-        Some(x) => match meshes.get_strong_handle(*x) {
-            Some(x) => x,
-            None => panic!("No mesh found with the ID we just got somehow"),
-        },
-        None => meshes.add(Sphere::default().mesh().uv(32, 18)),
-    };
+    let mesh_handle = sphere_info.0.clone();
 
     // get or add the material handle
-    let material_handle = match materials.ids().collect::<Vec<_>>().first() {
-        Some(x) => match materials.get_strong_handle(*x) {
-            Some(x) => x,
-            None => panic!("No material found with the ID we just got somehow"),
-        },
-        None => materials.add(StandardMaterial {
-            base_color_texture: Some(images.add(uv_debug_texture())),
-            ..default()
-        }),
-    };
+    let material_handle = sphere_info.1.clone();
     (
         Body { mass },
         Position(position),
         Velocity(velocity),
         PbrBundle {
-            mesh: mesh_handle.clone(),
-            material: material_handle.clone(),
+            mesh: mesh_handle,
+            material: material_handle,
             ..default()
         },
     )
 }
 
 fn initial_spawn(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut images: ResMut<Assets<Image>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut commands: Commands, sphere_info : Res<SphereInfo>,
 ) {
     commands.spawn(body_bundle(
         1.,
@@ -330,9 +338,7 @@ fn initial_spawn(
             y: 1.,
             z: 0.,
         },
-        &mut meshes,
-        &mut images,
-        &mut materials,
+        &sphere_info
     ));
     commands.spawn(body_bundle(
         1.,
@@ -346,9 +352,7 @@ fn initial_spawn(
             y: -1.,
             z: 0.,
         },
-        &mut meshes,
-        &mut images,
-        &mut materials,
+        &sphere_info
     ));
 }
 
@@ -361,8 +365,7 @@ fn camera_spawn(mut commands: Commands) {
 }
 
 fn get_radius(body: Body) -> f32 {
-    // divided by 2 because the default sphere has radius 0.5
-    body.mass.cbrt() / 2.
+    body.mass.cbrt()
 }
 
 // sum gravitational forces on bodies to arrive at their acceleration, euler integrate acceleration to modify velocity
@@ -401,7 +404,6 @@ fn update_body_positions(
 }
 
 // combine colliding bodies into one
-//TODO(henrygerardmoore): debug collisions
 fn resolve_body_collisions(
     mut query: Query<(Entity, &mut Body, &mut Position, &mut Velocity)>,
     mut commands: Commands,
@@ -418,7 +420,7 @@ fn resolve_body_collisions(
             // calculate quantities we'll use
             let m1 = body1.mass;
             let m2 = body2.mass;
-            // if either entity's mass is 0, skip
+            // if either entity's mass is 0, skip (this collision doesn't matter)
             if m1 == 0. || m2 == 0. {
                 continue;
             }
@@ -434,6 +436,7 @@ fn resolve_body_collisions(
 
             // enqueue the removal of entity2 and set its mass to 0 (so it won't collide with anything else)
             commands.entity(entity2).despawn();
+            println!("Deleting entity {}", entity2);
             body2.mass = 0.;
         }
     }
