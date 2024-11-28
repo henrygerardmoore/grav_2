@@ -102,7 +102,8 @@ fn spawn_help(mut commands: Commands) {
                 visibility: Visibility::Visible, // start visible so user sees the help screen
                 z_index: ZIndex::Global(i32::MAX),
                 style: Style {
-                    right: Val::Percent(100.),
+                    position_type: PositionType::Absolute,
+                    right: Val::Px(10.),
                     padding: UiRect::all(Val::Px(5.0)),
                     ..default()
                 },
@@ -112,13 +113,66 @@ fn spawn_help(mut commands: Commands) {
         .with_children(|c| {
             c.spawn((
                 TextBundle::from_sections([
-                    text_section(Color::WHITE.into(), "Controls"),
-                    text_section(Color::WHITE.into(), "Controls"),
-                    text_section(Color::WHITE.into(), "\nH to toggle the help"),
+                    TextSection::new(
+                        "Controls",
+                        TextStyle {
+                            font_size: 72.0,
+                            color: Color::WHITE.into(),
+                            ..default()
+                        },
+                    ),
+                    TextSection::new(
+                        "\n\nGeneral",
+                        TextStyle {
+                            font_size: 60.,
+                            color: Color::WHITE.into(),
+                            ..default()
+                        },
+                    ),
+                    text_section(Color::WHITE.into(), "\nH to show or hide this help display"),
+                    text_section(Color::WHITE.into(), "\nEsc to quit"),
+                    text_section(
+                        Color::WHITE.into(),
+                        "\nShift to increase speed (of any other control)",
+                    ),
+                    text_section(
+                        Color::WHITE.into(),
+                        "\nAlt to decrease speed (of any other control)",
+                    ),
+                    TextSection::new(
+                        "\n\nMovement",
+                        TextStyle {
+                            font_size: 60.,
+                            color: Color::WHITE.into(),
+                            ..default()
+                        },
+                    ),
                     text_section(Color::WHITE.into(), "\nWASD to move laterally"),
                     text_section(Color::WHITE.into(), "\nMouse to look"),
-                    text_section(Color::WHITE.into(), "\nP  to look"),
-                ]),
+                    TextSection::new(
+                        "\n\nSpawning",
+                        TextStyle {
+                            font_size: 60.,
+                            color: Color::WHITE.into(),
+                            ..default()
+                        },
+                    ),
+                    text_section(Color::WHITE.into(), "\nF or click middle mouse to spawn a body"),
+                    text_section(Color::WHITE.into(), "\nScroll mouse wheel to modify selected spawn option"),
+                    text_section(Color::WHITE.into(), "\nLeft click to select spawn speed"),
+                    text_section(Color::WHITE.into(), "\nRight click to select spawn size"),
+                    TextSection::new(
+                        "\n\nTime",
+                        TextStyle {
+                            font_size: 60.,
+                            color: Color::WHITE.into(),
+                            ..default()
+                        },
+                    ),
+                    text_section(Color::WHITE.into(), "\nP to pause time"),
+                    text_section(Color::WHITE.into(), "\nEquals key to increase simulation rate"),
+                    text_section(Color::WHITE.into(), "\nHyphen key to decrease simulation rate"),
+                ]).with_text_justify(JustifyText::Center),
                 HelpText,
             ));
         });
@@ -345,8 +399,6 @@ fn mouse_button_input(
     if buttons.just_pressed(MouseButton::Middle) || keys.just_pressed(KeyCode::KeyF) {
         spawn_options.mode = SpawnSelectionMode::FIRE;
     }
-
-    //TODO(henrygerardmoore): add ghostly display of spawn
 
     // check if we need to spawn
     if spawn_options.mode == SpawnSelectionMode::FIRE {
