@@ -104,7 +104,7 @@ fn create_spawn_display(mut commands: Commands) {
 fn update_spawn_display(mut query: Query<&mut Text>, spawn_options: Res<BodySpawningOptions>) {
     let mut text = query.single_mut();
     text.sections[2].value = format!("{0:.2}", spawn_options.speed);
-    text.sections[4].value = format!("{0:.2}", spawn_options.size);
+    text.sections[4].value = format!("{0:.2}", spawn_options.radius);
 }
 
 fn reset_sim(
@@ -173,7 +173,7 @@ impl Default for SpawnSelectionMode {
 #[derive(Resource, Clone, Copy)]
 struct BodySpawningOptions {
     mode: SpawnSelectionMode,
-    size: f32,
+    radius: f32,
     speed: f32,
 }
 
@@ -182,7 +182,7 @@ impl Default for BodySpawningOptions {
     fn default() -> Self {
         Self {
             mode: Default::default(),
-            size: 1.,
+            radius: get_default_sphere_radius(),
             speed: 1.,
         }
     }
@@ -201,7 +201,7 @@ fn mouse_button_input(
         match spawn_options.mode {
             SpawnSelectionMode::NONE => continue,
             SpawnSelectionMode::SIZE => {
-                spawn_options.size += ev.y * SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY
+                spawn_options.radius += ev.y * SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY
             }
             SpawnSelectionMode::SPEED => {
                 spawn_options.speed += ev.y * SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY
@@ -209,7 +209,7 @@ fn mouse_button_input(
             SpawnSelectionMode::FIRE => continue,
         }
     }
-    spawn_options.size = spawn_options.size.clamp(0., SPAWN_SIZE_MAX);
+    spawn_options.radius = spawn_options.radius.clamp(0., SPAWN_SIZE_MAX);
     spawn_options.speed = spawn_options.speed.clamp(0., SPAWN_SPEED_MAX);
     if buttons.just_pressed(MouseButton::Left) {
         spawn_options.mode = SpawnSelectionMode::SPEED;
@@ -227,18 +227,17 @@ fn mouse_button_input(
     if spawn_options.mode == SpawnSelectionMode::FIRE {
         spawn_options.mode = SpawnSelectionMode::NONE;
         let tf = camera.single();
-        if spawn_options.size <= 0. {
+        if spawn_options.radius <= 0. {
             return;
         }
-        // the radius is more natural to control than the mass
-        let mass = spawn_options.size.powf(3.);
+        let mass = get_mass(spawn_options.radius);
         commands.spawn(body_bundle(
             mass,
             Vec3 {
                 x: tf.translation.x,
                 y: tf.translation.y,
                 z: tf.translation.z,
-            } + Vec3::from(tf.forward()),
+            } + Vec3::from(tf.forward()) * (spawn_options.radius + 0.01), // move it in front of the camera
             tf.forward() * spawn_options.speed,
             &sphere_info,
         ));
@@ -338,7 +337,7 @@ fn create_sphere_info(
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let mesh_handle = meshes.add(Sphere { radius: 1. }.mesh().uv(32, 18));
+    let mesh_handle = meshes.add(Sphere::default().mesh().uv(32, 18));
     let material_handle = materials.add(StandardMaterial {
         base_color_texture: Some(images.add(uv_debug_texture())),
         ..default()
@@ -410,7 +409,15 @@ fn camera_spawn(mut commands: Commands) {
 }
 
 fn get_radius(body: Body) -> f32 {
-    body.mass.cbrt()
+    body.mass.cbrt() * get_default_sphere_radius()
+}
+
+fn get_mass(radius: f32) -> f32 {
+    (radius / get_default_sphere_radius()).powf(3.)
+}
+
+fn get_default_sphere_radius() -> f32 {
+    Sphere::default().radius
 }
 
 // sum gravitational forces on bodies to arrive at their acceleration, euler integrate acceleration to modify velocity
