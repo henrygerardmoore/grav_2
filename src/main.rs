@@ -9,6 +9,8 @@ use bevy::{
     },
     window::{Cursor, CursorGrabMode, PrimaryWindow},
 };
+
+// TODO(henrygerardmoore): add loadable config file
 pub struct GravPlugin;
 const G: f32 = 8.;
 const MOUSE_SENSITIVITY: f32 = 0.002; // ?
@@ -18,6 +20,7 @@ const SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY: f32 = 0.05;
 const SPAWN_SPEED_MAX: f32 = 20.;
 const SPAWN_SIZE_MAX: f32 = 5.;
 
+// TODO(henrygerardmoore): add 'h' key to display controls
 // TODO(henrygerardmoore): extract functions to files and import instead of giant main.rs
 fn main() {
     App::new()
@@ -107,6 +110,7 @@ fn update_spawn_display(mut query: Query<&mut Text>, spawn_options: Res<BodySpaw
     text.sections[4].value = format!("{0:.2}", spawn_options.radius);
 }
 
+// TODO(henrygerardmoore): reset camera pos too
 fn reset_sim(
     keys: Res<ButtonInput<KeyCode>>,
     query: Query<Entity, With<Body>>,
@@ -244,6 +248,7 @@ fn mouse_button_input(
     }
 }
 
+// TODO(henrygerardmoore): make shift key move more quickly
 fn move_camera(
     keys: Res<ButtonInput<KeyCode>>,
     mut camera: Query<&mut Transform, With<Camera>>,
@@ -273,6 +278,8 @@ fn move_camera(
     transform.translation += net_translation.normalize_or_zero() * motion_distance;
 }
 
+
+// TODO(henrygerardmoore): add changing time rate
 fn pause_time(keys: Res<ButtonInput<KeyCode>>, mut paused: ResMut<TimePaused>) {
     if keys.just_pressed(KeyCode::KeyP) {
         paused.0 = !paused.0;
