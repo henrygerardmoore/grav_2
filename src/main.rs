@@ -20,7 +20,6 @@ const SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY: f32 = 0.05;
 const SPAWN_SPEED_MAX: f32 = 20.;
 const SPAWN_SIZE_MAX: f32 = 5.;
 
-// TODO(henrygerardmoore): add 'h' key to display controls
 // TODO(henrygerardmoore): extract functions to files and import instead of giant main.rs
 fn main() {
     App::new()
@@ -65,53 +64,133 @@ fn main() {
         .add_systems(Update, exit_system)
         .add_systems(Update, rotate_camera)
         .add_systems(Update, move_camera)
-        .add_systems(Update, reset_sim)
+        .add_systems(Update, reset_bodies)
+        .add_systems(Update, reset_camera)
         .add_systems(Update, update_spawn_display)
+        .add_systems(Startup, spawn_help)
+        .add_systems(Startup, show_hide_help)
         .run();
 }
 
-// see bevymark.rs
-fn create_spawn_display(mut commands: Commands) {
-    let text_section = move |color: Srgba, value: &str| {
-        TextSection::new(
-            value,
-            TextStyle {
-                font_size: 40.0,
-                color: color.into(),
-                ..default()
-            },
-        )
-    };
-    commands
-        .spawn(NodeBundle {
-            style: Style {
-                position_type: PositionType::Absolute,
-                padding: UiRect::all(Val::Px(5.0)),
-                ..default()
-            },
-            z_index: ZIndex::Global(i32::MAX),
-            background_color: Color::WHITE.with_alpha(0.75).into(),
+#[derive(Component, Clone, Copy)]
+struct HelpText;
+
+#[derive(Component, Clone, Copy)]
+struct HelpUI;
+
+fn text_section(color: Srgba, value: &str) -> TextSection {
+    TextSection::new(
+        value,
+        TextStyle {
+            font_size: 40.0,
+            color: color.into(),
             ..default()
-        })
+        },
+    )
+}
+
+fn spawn_help(mut commands: Commands) {
+    commands
+        .spawn((
+            HelpUI,
+            NodeBundle {
+                background_color: Color::BLACK.into(),
+                visibility: Visibility::Hidden,
+                inherited_visibility: InheritedVisibility::HIDDEN,
+                z_index: ZIndex::Global(i32::MAX),
+                ..default()
+            },
+        ))
         .with_children(|c| {
-            c.spawn(TextBundle::from_sections([
-                text_section(Color::BLACK.into(), "Body spawn options"),
-                text_section(Color::BLACK.into(), "\nSpeed: "),
-                text_section(Color::BLACK.into(), ""),
-                text_section(Color::BLACK.into(), "\nSize: "),
-                text_section(Color::BLACK.into(), ""),
-            ]));
+            c.spawn((
+                TextBundle::from_sections([
+                    text_section(Color::WHITE.into(), "Controls"),
+                    text_section(Color::WHITE.into(), "Controls"),
+                ]),
+                HelpText,
+            ));
         });
 }
 
-fn update_spawn_display(mut query: Query<&mut Text>, spawn_options: Res<BodySpawningOptions>) {
+// TODO(henrygerardmoore): add 'h' key to display controls
+fn show_hide_help(
+    mut query: Query<&mut ViewVisibility, With<SpawnUI>>,
+    keys: Res<ButtonInput<KeyCode>>,
+) {
+    if keys.just_pressed(KeyCode::KeyH) {
+        // show help
+        query.single_mut().set();
+    }
+    if keys.just_released(KeyCode::KeyH) {
+        // hide help
+        // query.single_mut().
+    }
+}
+
+// marks spawn display
+#[derive(Component, Clone, Copy)]
+struct SpawnText;
+
+// marks spawn UI
+#[derive(Component, Clone, Copy)]
+struct SpawnUI;
+
+// see bevymark.rs
+fn create_spawn_display(mut commands: Commands) {
+    commands
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    position_type: PositionType::Absolute,
+                    padding: UiRect::all(Val::Px(5.0)),
+                    ..default()
+                },
+                z_index: ZIndex::Global(i32::MAX - 1),
+                background_color: Color::WHITE.with_alpha(0.75).into(),
+                ..default()
+            },
+            SpawnUI,
+        ))
+        .with_children(|c| {
+            c.spawn((
+                TextBundle::from_sections([
+                    text_section(Color::BLACK.into(), "Body spawn options"),
+                    text_section(Color::BLACK.into(), "\nSpeed: "),
+                    text_section(Color::BLACK.into(), ""),
+                    text_section(Color::BLACK.into(), "\nSize: "),
+                    text_section(Color::BLACK.into(), ""),
+                ]),
+                SpawnText,
+            ));
+        });
+}
+
+fn update_spawn_display(
+    mut query: Query<&mut Text, With<SpawnText>>,
+    spawn_options: Res<BodySpawningOptions>,
+) {
     let mut text = query.single_mut();
     text.sections[2].value = format!("{0:.2}", spawn_options.speed);
     text.sections[4].value = format!("{0:.2}", spawn_options.radius);
+    match spawn_options.mode {
+        SpawnSelectionMode::SIZE => {
+            text.sections[3].style.color = Color::srgb(1., 0., 0.);
+            text.sections[1].style.color = Color::BLACK;
+            return;
+        }
+        SpawnSelectionMode::SPEED => {
+            text.sections[1].style.color = Color::srgb(1., 0., 0.);
+            text.sections[3].style.color = Color::BLACK;
+            return;
+        }
+        _ => {
+            text.sections[3].style.color = Color::BLACK;
+            text.sections[4].style.color = Color::BLACK;
+        }
+    };
 }
 
-// TODO(henrygerardmoore): reset camera pos too
-fn reset_sim(
+fn reset_bodies(
     keys: Res<ButtonInput<KeyCode>>,
     query: Query<Entity, With<Body>>,
     mut commands: Commands,
@@ -123,6 +202,20 @@ fn reset_sim(
             commands.entity(entity).despawn();
         }
         initial_spawn(commands, sphere_info);
+    }
+}
+
+fn reset_camera(
+    keys: Res<ButtonInput<KeyCode>>,
+    query: Query<Entity, With<Camera>>,
+    mut commands: Commands,
+) {
+    if keys.just_pressed(KeyCode::KeyR) {
+        let mut entity_iter = query.iter();
+        while let Some(entity) = entity_iter.next() {
+            commands.entity(entity).despawn();
+        }
+        camera_spawn(commands);
     }
 }
 
@@ -277,7 +370,6 @@ fn move_camera(
     }
     transform.translation += net_translation.normalize_or_zero() * motion_distance;
 }
-
 
 // TODO(henrygerardmoore): add changing time rate
 fn pause_time(keys: Res<ButtonInput<KeyCode>>, mut paused: ResMut<TimePaused>) {
