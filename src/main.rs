@@ -21,6 +21,7 @@ const SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY: f32 = 0.05;
 const SPAWN_SPEED_MAX: f32 = 20.;
 const SPAWN_SIZE_MAX: f32 = 5.;
 const TIME_RATE_SENSITIVITY: f32 = 0.1;
+const SPEED_MOD_FACTOR: f32 = 5.;
 
 // TODO(henrygerardmoore): extract functions to files and import instead of giant main.rs
 fn main() {
@@ -182,16 +183,14 @@ fn update_osd(
         SpawnSelectionMode::SIZE => {
             text.sections[3].style.color = Color::srgb(1., 0., 0.);
             text.sections[1].style.color = Color::BLACK;
-            return;
         }
         SpawnSelectionMode::SPEED => {
             text.sections[1].style.color = Color::srgb(1., 0., 0.);
             text.sections[3].style.color = Color::BLACK;
-            return;
         }
         _ => {
+            text.sections[1].style.color = Color::BLACK;
             text.sections[3].style.color = Color::BLACK;
-            text.sections[4].style.color = Color::BLACK;
         }
     };
     if time_paused.0 {
@@ -306,19 +305,29 @@ fn mouse_button_input(
     sphere_info: Res<SphereInfo>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
+    // shift lets you control more coarsely
+    let mut sens_mod = if keys.pressed(KeyCode::ShiftLeft) {
+        SPEED_MOD_FACTOR
+    } else {
+        1.
+    };
+    // alt lets you control more finely
+    if keys.pressed(KeyCode::AltLeft) {
+        sens_mod /= SPEED_MOD_FACTOR;
+    }
     for ev in evr_scroll.read() {
         match spawn_options.mode {
             SpawnSelectionMode::NONE => continue,
             SpawnSelectionMode::SIZE => {
-                spawn_options.radius += ev.y * SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY
+                spawn_options.radius += ev.y * SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY * sens_mod
             }
             SpawnSelectionMode::SPEED => {
-                spawn_options.speed += ev.y * SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY
+                spawn_options.speed += ev.y * SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY * sens_mod
             }
             SpawnSelectionMode::FIRE => continue,
         }
     }
-    spawn_options.radius = spawn_options.radius.clamp(0., SPAWN_SIZE_MAX);
+    spawn_options.radius = spawn_options.radius.clamp(SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY / SPEED_MOD_FACTOR, SPAWN_SIZE_MAX);
     spawn_options.speed = spawn_options.speed.clamp(0., SPAWN_SPEED_MAX);
     if buttons.just_pressed(MouseButton::Left) {
         spawn_options.mode = SpawnSelectionMode::SPEED;
@@ -346,7 +355,7 @@ fn mouse_button_input(
                 x: tf.translation.x,
                 y: tf.translation.y,
                 z: tf.translation.z,
-            } + Vec3::from(tf.forward()) * (spawn_options.radius + 0.01), // move it in front of the camera
+            } + Vec3::from(tf.forward()) * (spawn_options.radius + 1.01), // move it in front of the camera
             tf.forward() * spawn_options.speed,
             &sphere_info,
         ));
@@ -359,11 +368,14 @@ fn move_camera(
     time: Res<Time>,
 ) {
     // move faster when shift is held
-    let speed_mod = if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
-        1.25
+    let mut speed_mod = if keys.pressed(KeyCode::ShiftLeft) {
+        SPEED_MOD_FACTOR
     } else {
         1.
     };
+    if keys.pressed(KeyCode::AltLeft) {
+        speed_mod /= SPEED_MOD_FACTOR;
+    }
     let motion_distance = time.delta_seconds() * CAMERA_SPEED * speed_mod;
     let mut transform = camera.single_mut();
     let mut net_translation = Vec3::ZERO;
@@ -396,16 +408,27 @@ fn modify_time(
     mut paused: ResMut<TimePaused>,
     mut rate: ResMut<TimeRate>,
 ) {
+    // shift lets you control more coarsely
+    let mut sens_mod = if keys.pressed(KeyCode::ShiftLeft) {
+        SPEED_MOD_FACTOR
+    } else {
+        1.
+    };
+
+    // alt lets you control more finely
+    if keys.pressed(KeyCode::AltLeft) {
+        sens_mod /= SPEED_MOD_FACTOR;
+    }
     if keys.just_pressed(KeyCode::KeyP) {
         paused.0 = !paused.0;
     }
     if keys.just_pressed(KeyCode::Equal) {
-        rate.0 += TIME_RATE_SENSITIVITY;
+        rate.0 += TIME_RATE_SENSITIVITY * sens_mod;
     }
     if keys.just_pressed(KeyCode::Minus) {
-        rate.0 -= TIME_RATE_SENSITIVITY;
+        rate.0 -= TIME_RATE_SENSITIVITY * sens_mod;
     }
-    rate.0 = rate.0.clamp(TIME_RATE_SENSITIVITY, 10.);
+    rate.0 = rate.0.clamp(TIME_RATE_SENSITIVITY / SPEED_MOD_FACTOR, 10.);
 }
 
 fn exit_system(keys: Res<ButtonInput<KeyCode>>, mut exit: EventWriter<AppExit>) {
