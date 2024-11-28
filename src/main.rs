@@ -33,6 +33,8 @@ fn main() {
                     ..default()
                 }),
         )
+        // make the background look like space
+        .insert_resource(ClearColor(Color::BLACK))
         .add_systems(Startup, (initial_spawn, camera_spawn))
         .add_systems(
             Update,
