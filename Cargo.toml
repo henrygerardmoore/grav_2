@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 bevy = { version = "0.14.2"}
+# for cross compiling to windows with msvc
+blake3 = { version = "1.5", features = [ "pure" ] }
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
