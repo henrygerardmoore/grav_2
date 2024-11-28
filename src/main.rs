@@ -9,7 +9,6 @@ mod systems;
 use resources::*;
 use systems::*;
 
-// TODO(henrygerardmoore): add CI job building linux, macOS, and windows executables for download
 // TODO(henrygerardmoore): test on macOS
 fn main() {
     App::new()
