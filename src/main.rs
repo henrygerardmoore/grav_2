@@ -35,6 +35,8 @@ fn main() {
         )
         // make the background look like space
         .insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(TimePaused(false))
+        .add_systems(Update, pause_time)
         .add_systems(Startup, (initial_spawn, camera_spawn))
         .add_systems(
             Update,
@@ -104,7 +106,13 @@ fn move_camera(keys: Res<ButtonInput<KeyCode>>, mut camera: Query<&mut Transform
     if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) {
         net_translation += *transform.down();
     }
-    transform.translation += net_translation.normalize_or_zero() * motion_distance
+    transform.translation += net_translation.normalize_or_zero() * motion_distance;
+}
+
+fn pause_time(keys: Res<ButtonInput<KeyCode>>, mut paused: ResMut<TimePaused>) {
+    if keys.pressed(KeyCode::KeyP) {
+        paused.0 = !paused.0;
+    }
 }
 
 fn exit_system(keys: Res<ButtonInput<KeyCode>>, mut exit: EventWriter<AppExit>) {
@@ -141,6 +149,9 @@ fn uv_debug_texture() -> Image {
         RenderAssetUsages::RENDER_WORLD,
     )
 }
+
+#[derive(Resource, Clone, Copy)]
+struct TimePaused(bool);
 
 #[derive(Component, Clone, Copy)]
 struct Body {
@@ -215,8 +226,8 @@ fn get_radius(body: Body) -> f32 {
 }
 
 // sum gravitational forces on bodies to arrive at their acceleration, euler integrate acceleration to modify velocity
-fn update_body_velocities(mut query: Query<(&Body, &Position, &mut Velocity)>, time: Res<Time>) {
-    let dt = time.delta_seconds();
+fn update_body_velocities(mut query: Query<(&Body, &Position, &mut Velocity)>, time: Res<Time>, paused: Res<TimePaused>) {
+    let dt = if paused.0 {0.} else {time.delta_seconds()};
     let mut query_next = query.iter_combinations_mut();
     while let Some([(body1, &p1, mut v1), (body2, &p2, mut v2)]) = query_next.fetch_next() {
         let m1 = body1.mass;
@@ -232,8 +243,8 @@ fn update_body_velocities(mut query: Query<(&Body, &Position, &mut Velocity)>, t
 }
 
 // euler integrate body velocities to update body positions
-fn update_body_positions(mut query: Query<(&mut Position, &Velocity)>, time: Res<Time>) {
-    let dt = time.delta_seconds();
+fn update_body_positions(mut query: Query<(&mut Position, &Velocity)>, time: Res<Time>, paused: Res<TimePaused>) {
+    let dt = if paused.0 {0.} else {time.delta_seconds()};
     query.iter_mut().for_each(|(mut position, velocity)| {
         position.0.x += velocity.0.x * dt;
         position.0.y += velocity.0.y * dt;
