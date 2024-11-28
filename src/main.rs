@@ -1,10 +1,38 @@
-use bevy::{math::NormedVectorSpace, prelude::*, render::{render_asset::RenderAssetUsages, render_resource::{Extent3d, TextureDimension, TextureFormat}}};
+use bevy::{
+    core::FrameCount,
+    input::mouse::MouseMotion,
+    math::NormedVectorSpace,
+    prelude::*,
+    render::{
+        render_asset::RenderAssetUsages,
+        render_resource::{Extent3d, TextureDimension, TextureFormat},
+    },
+    window::{Cursor, CursorGrabMode, PrimaryWindow},
+};
 pub struct GravPlugin;
 const G: f32 = 8.;
+const MOUSE_SENSITIVITY: f32 = 0.002; // ?
+const CAMERA_SPEED: f32 = 5.; // m/s
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .add_plugins(
+            DefaultPlugins
+                .set(ImagePlugin::default_nearest())
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Henry's 3D N-body gravity sim!".into(),
+                        name: Some("grav_2.app".into()),
+                        mode: bevy::window::WindowMode::Fullscreen,
+                        cursor: Cursor {
+                            visible: false,
+                            ..default()
+                        },
+                        ..default()
+                    }),
+                    ..default()
+                }),
+        )
         .add_systems(Startup, (initial_spawn, camera_spawn))
         .add_systems(
             Update,
@@ -16,10 +44,72 @@ fn main() {
             )
                 .chain(),
         )
+        .add_systems(Update, capture_or_release_cursor)
+        .add_systems(Update, exit_system)
+        .add_systems(Update, rotate_camera)
+        .add_systems(Update, move_camera)
         .run();
 }
 
+fn capture_or_release_cursor(mut window: Query<&mut Window, With<PrimaryWindow>>, frames: Res<FrameCount>) {
+    // https://github.com/bevyengine/bevy/issues/16238
+    // wait for a bit before capturing the cursor
+    if frames.0 >= 6 {
+        let mut primary_window = window.single_mut();
+        if primary_window.focused {
+            primary_window.cursor.grab_mode = CursorGrabMode::Locked;
+            primary_window.cursor.visible = false;
+        } else {
+            primary_window.cursor.grab_mode = CursorGrabMode::None;
+            primary_window.cursor.visible = true;
+        }
+    }
+}
 
+// from examples/camera/first_person_view_model.rs
+fn rotate_camera(
+    mut mouse_motion: EventReader<MouseMotion>,
+    mut camera: Query<&mut Transform, With<Camera>>,
+) {
+    let mut transform = camera.single_mut();
+    for motion in mouse_motion.read() {
+        let yaw = -motion.delta.x * MOUSE_SENSITIVITY;
+        let pitch = -motion.delta.y * MOUSE_SENSITIVITY;
+        transform.rotate_y(yaw);
+        transform.rotate_local_x(pitch);
+    }
+}
+
+fn move_camera(keys: Res<ButtonInput<KeyCode>>, mut camera: Query<&mut Transform, With<Camera>>, time: Res<Time>) {
+    let motion_distance = time.delta_seconds() * CAMERA_SPEED;
+    let mut transform = camera.single_mut();
+    let mut net_translation = Vec3::ZERO;
+    if keys.pressed(KeyCode::KeyW) {
+        net_translation += *transform.forward();
+    }
+    if keys.pressed(KeyCode::KeyS) {
+        net_translation += *transform.back();
+    }
+    if keys.pressed(KeyCode::KeyA) {
+        net_translation += *transform.left();
+    }
+    if keys.pressed(KeyCode::KeyD) {
+        net_translation += *transform.right();
+    }
+    if keys.pressed(KeyCode::Space) {
+        net_translation += *transform.up();
+    }
+    if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) {
+        net_translation += *transform.down();
+    }
+    transform.translation += net_translation.normalize_or_zero() * motion_distance
+}
+
+fn exit_system(keys: Res<ButtonInput<KeyCode>>, mut exit: EventWriter<AppExit>) {
+    if keys.just_pressed(KeyCode::Escape) {
+        exit.send(AppExit::Success);
+    }
+}
 
 // from 3d_shapes.rs bevy example
 fn uv_debug_texture() -> Image {
