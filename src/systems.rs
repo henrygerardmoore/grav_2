@@ -3,7 +3,7 @@ use bevy::{
     input::mouse::{MouseMotion, MouseWheel},
     math::NormedVectorSpace,
     prelude::*,
-    window::PrimaryWindow,
+    window::{CursorGrabMode, PrimaryWindow},
 };
 
 use crate::{components::{Body, HelpText, HelpUI, Position, SpawnText, SpawnUI, Velocity}, helpers::{body_bundle, uv_debug_texture}};
@@ -234,7 +234,6 @@ pub fn reset_camera(
     }
 }
 
-// TODO(henrygerardmoore): fix on windows
 pub fn capture_or_release_cursor(
     mut window: Query<&mut Window, With<PrimaryWindow>>,
     frames: Res<FrameCount>,
@@ -246,7 +245,11 @@ pub fn capture_or_release_cursor(
         let mut primary_window = window.single_mut();
         if primary_window.focused {
             primary_window.cursor.visible = false;
+            primary_window.cursor.grab_mode = CursorGrabMode::Locked;
+            primary_window.mode = bevy::window::WindowMode::Fullscreen;
         } else {
+            primary_window.cursor.grab_mode = CursorGrabMode::None;
+            primary_window.mode = bevy::window::WindowMode::BorderlessFullscreen;
             primary_window.cursor.visible = true;
             paused.0 = true;
         }
