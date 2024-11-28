@@ -19,6 +19,7 @@ const SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY: f32 = 0.05;
 const SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY: f32 = 0.05;
 const SPAWN_SPEED_MAX: f32 = 20.;
 const SPAWN_SIZE_MAX: f32 = 5.;
+const TIME_RATE_SENSITIVITY: f32 = 0.1;
 
 // TODO(henrygerardmoore): extract functions to files and import instead of giant main.rs
 fn main() {
@@ -44,10 +45,11 @@ fn main() {
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(TimePaused(false))
         .insert_resource(SphereInfo::default())
-        .add_systems(Update, pause_time)
+        .insert_resource(TimeRate(1.))
+        .add_systems(Update, modify_time)
         .add_systems(Startup, (create_sphere_info, initial_spawn).chain())
         .add_systems(Startup, camera_spawn)
-        .add_systems(Startup, create_spawn_display)
+        .add_systems(Startup, create_osd)
         .add_systems(
             Update,
             (
@@ -66,7 +68,7 @@ fn main() {
         .add_systems(Update, move_camera)
         .add_systems(Update, reset_bodies)
         .add_systems(Update, reset_camera)
-        .add_systems(Update, update_spawn_display)
+        .add_systems(Update, update_osd)
         .add_systems(Startup, spawn_help)
         .add_systems(Startup, show_hide_help)
         .run();
@@ -136,7 +138,7 @@ struct SpawnText;
 struct SpawnUI;
 
 // see bevymark.rs
-fn create_spawn_display(mut commands: Commands) {
+fn create_osd(mut commands: Commands) {
     commands
         .spawn((
             NodeBundle {
@@ -154,10 +156,11 @@ fn create_spawn_display(mut commands: Commands) {
         .with_children(|c| {
             c.spawn((
                 TextBundle::from_sections([
-                    text_section(Color::BLACK.into(), "Body spawn options"),
-                    text_section(Color::BLACK.into(), "\nSpeed: "),
+                    text_section(Color::BLACK.into(), "Body spawn speed: "),
                     text_section(Color::BLACK.into(), ""),
-                    text_section(Color::BLACK.into(), "\nSize: "),
+                    text_section(Color::BLACK.into(), "\nBody spawn size: "),
+                    text_section(Color::BLACK.into(), ""),
+                    text_section(Color::BLACK.into(), "\nTime speed: "),
                     text_section(Color::BLACK.into(), ""),
                 ]),
                 SpawnText,
@@ -165,13 +168,15 @@ fn create_spawn_display(mut commands: Commands) {
         });
 }
 
-fn update_spawn_display(
+fn update_osd(
     mut query: Query<&mut Text, With<SpawnText>>,
     spawn_options: Res<BodySpawningOptions>,
+    time_rate: Res<TimeRate>,
+    time_paused: Res<TimePaused>,
 ) {
     let mut text = query.single_mut();
-    text.sections[2].value = format!("{0:.2}", spawn_options.speed);
-    text.sections[4].value = format!("{0:.2}", spawn_options.radius);
+    text.sections[1].value = format!("{0:.2}", spawn_options.speed);
+    text.sections[3].value = format!("{0:.2}", spawn_options.radius);
     match spawn_options.mode {
         SpawnSelectionMode::SIZE => {
             text.sections[3].style.color = Color::srgb(1., 0., 0.);
@@ -188,6 +193,11 @@ fn update_spawn_display(
             text.sections[4].style.color = Color::BLACK;
         }
     };
+    if time_paused.0 {
+        text.sections[5].value = "paused".into();
+    } else {
+        text.sections[5].value = format!("{0:.2}x", time_rate.0);
+    }
 }
 
 fn reset_bodies(
@@ -342,13 +352,18 @@ fn mouse_button_input(
     }
 }
 
-// TODO(henrygerardmoore): make shift key move more quickly
 fn move_camera(
     keys: Res<ButtonInput<KeyCode>>,
     mut camera: Query<&mut Transform, With<Camera>>,
     time: Res<Time>,
 ) {
-    let motion_distance = time.delta_seconds() * CAMERA_SPEED;
+    // move faster when shift is held
+    let speed_mod = if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
+        1.25
+    } else {
+        1.
+    };
+    let motion_distance = time.delta_seconds() * CAMERA_SPEED * speed_mod;
     let mut transform = camera.single_mut();
     let mut net_translation = Vec3::ZERO;
     if keys.pressed(KeyCode::KeyW) {
@@ -372,11 +387,24 @@ fn move_camera(
     transform.translation += net_translation.normalize_or_zero() * motion_distance;
 }
 
-// TODO(henrygerardmoore): add changing time rate
-fn pause_time(keys: Res<ButtonInput<KeyCode>>, mut paused: ResMut<TimePaused>) {
+#[derive(Resource, Clone, Copy)]
+struct TimeRate(f32);
+
+fn modify_time(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut paused: ResMut<TimePaused>,
+    mut rate: ResMut<TimeRate>,
+) {
     if keys.just_pressed(KeyCode::KeyP) {
         paused.0 = !paused.0;
     }
+    if keys.just_pressed(KeyCode::Equal) {
+        rate.0 += TIME_RATE_SENSITIVITY;
+    }
+    if keys.just_pressed(KeyCode::Minus) {
+        rate.0 -= TIME_RATE_SENSITIVITY;
+    }
+    rate.0 = rate.0.clamp(TIME_RATE_SENSITIVITY, 10.);
 }
 
 fn exit_system(keys: Res<ButtonInput<KeyCode>>, mut exit: EventWriter<AppExit>) {
@@ -525,8 +553,13 @@ fn update_body_velocities(
     mut query: Query<(&Body, &Position, &mut Velocity)>,
     time: Res<Time>,
     paused: Res<TimePaused>,
+    time_rate: Res<TimeRate>,
 ) {
-    let dt = if paused.0 { 0. } else { time.delta_seconds() };
+    let dt = if paused.0 {
+        0.
+    } else {
+        time.delta_seconds() * time_rate.0
+    };
     let mut query_next = query.iter_combinations_mut();
     while let Some([(body1, &p1, mut v1), (body2, &p2, mut v2)]) = query_next.fetch_next() {
         let m1 = body1.mass;
@@ -546,8 +579,13 @@ fn update_body_positions(
     mut query: Query<(&mut Position, &Velocity)>,
     time: Res<Time>,
     paused: Res<TimePaused>,
+    time_rate: Res<TimeRate>,
 ) {
-    let dt = if paused.0 { 0. } else { time.delta_seconds() };
+    let dt = if paused.0 {
+        0.
+    } else {
+        time.delta_seconds() * time_rate.0
+    };
     query.iter_mut().for_each(|(mut position, velocity)| {
         position.0.x += velocity.0.x * dt;
         position.0.y += velocity.0.y * dt;
