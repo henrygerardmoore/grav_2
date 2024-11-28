@@ -436,7 +436,6 @@ fn resolve_body_collisions(
 
             // enqueue the removal of entity2 and set its mass to 0 (so it won't collide with anything else)
             commands.entity(entity2).despawn();
-            println!("Deleting entity {}", entity2);
             body2.mass = 0.;
         }
     }
