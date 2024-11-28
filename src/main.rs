@@ -64,6 +64,7 @@ fn main() {
 fn capture_or_release_cursor(
     mut window: Query<&mut Window, With<PrimaryWindow>>,
     frames: Res<FrameCount>,
+    mut paused: ResMut<TimePaused>,
 ) {
     // https://github.com/bevyengine/bevy/issues/16238
     // wait for a bit before capturing the cursor
@@ -75,6 +76,7 @@ fn capture_or_release_cursor(
         } else {
             primary_window.cursor.grab_mode = CursorGrabMode::None;
             primary_window.cursor.visible = true;
+            paused.0 = true;
         }
     }
 }
@@ -107,11 +109,22 @@ impl Default for SpawnSelectionMode {
     }
 }
 
-#[derive(Resource, Clone, Copy, Default)]
+#[derive(Resource, Clone, Copy)]
 struct BodySpawningOptions {
     mode: SpawnSelectionMode,
     size: f32,
     speed: f32,
+}
+
+// override default values for size and speed (f32 default is 0)
+impl Default for BodySpawningOptions {
+    fn default() -> Self {
+        Self {
+            mode: Default::default(),
+            size: 1.,
+            speed: 1.,
+        }
+    }
 }
 
 fn mouse_button_input(
@@ -122,12 +135,18 @@ fn mouse_button_input(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+    keys: Res<ButtonInput<KeyCode>>,
 ) {
     for ev in evr_scroll.read() {
         match spawn_options.mode {
             SpawnSelectionMode::NONE => continue,
-            SpawnSelectionMode::SIZE => spawn_options.size += ev.y * SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY,
-            SpawnSelectionMode::SPEED => spawn_options.speed += ev.y * SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY,
+            SpawnSelectionMode::SIZE => {
+                spawn_options.size += ev.y * SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY
+            }
+            SpawnSelectionMode::SPEED => {
+                spawn_options.speed += ev.y * SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY
+            }
             SpawnSelectionMode::FIRE => continue,
         }
     }
@@ -139,7 +158,7 @@ fn mouse_button_input(
     if buttons.just_pressed(MouseButton::Right) {
         spawn_options.mode = SpawnSelectionMode::SIZE;
     }
-    if buttons.just_pressed(MouseButton::Middle) {
+    if buttons.just_pressed(MouseButton::Middle) || keys.just_pressed(KeyCode::KeyF) {
         spawn_options.mode = SpawnSelectionMode::FIRE;
     }
 
@@ -147,39 +166,22 @@ fn mouse_button_input(
 
     // check if we need to spawn
     if spawn_options.mode == SpawnSelectionMode::FIRE {
-        // TODO(henrygerardmoore): extract spawns from this and initial_spawn to separate function 
-        let mesh_id = match meshes.ids().collect::<Vec<_>>().first() {
-            Some(x) => *x,
-            None => panic!("No mesh loaded!"),
-        };
-        let mesh_handle = match meshes.get_strong_handle(mesh_id) {
-            Some(x) => x,
-            None => panic!("No mesh found with the ID we just got :thinking:")
-        };
-
-        let material_id = match materials.ids().collect::<Vec<_>>().first() {
-            Some(x) => *x,
-            None => panic!("No mesh loaded!"),
-        };
-        let material_handle = match materials.get_strong_handle(material_id) {
-            Some(x) => x,
-            None => panic!("No mesh found with the ID we just got :thinking:")
-        };
         spawn_options.mode = SpawnSelectionMode::NONE;
         let tf = camera.single();
-        commands.spawn((
-            Body { mass: spawn_options.size },
-            Position(Vec3 {
+        if spawn_options.size <= 0. {
+            return;
+        }
+        commands.spawn(body_bundle(
+            spawn_options.size,
+            Vec3 {
                 x: tf.translation.x,
                 y: tf.translation.y,
                 z: tf.translation.z,
-            }),
-            Velocity(tf.forward() * spawn_options.speed),
-            PbrBundle {
-                mesh: mesh_handle.clone(),
-                material: material_handle.clone(),
-                ..default()
             },
+            tf.forward() * spawn_options.speed,
+            &mut meshes,
+            &mut images,
+            &mut materials,
         ));
     }
 }
@@ -214,7 +216,7 @@ fn move_camera(
 }
 
 fn pause_time(keys: Res<ButtonInput<KeyCode>>, mut paused: ResMut<TimePaused>) {
-    if keys.pressed(KeyCode::KeyP) {
+    if keys.just_pressed(KeyCode::KeyP) {
         paused.0 = !paused.0;
     }
 }
@@ -268,52 +270,85 @@ struct Position(Vec3);
 #[derive(Component, Clone, Copy)]
 struct Velocity(Vec3);
 
+
+// TODO(henrygerardmoore): fix debug texture and extract mesh addition to other function
+fn body_bundle(
+    mass: f32,
+    position: Vec3,
+    velocity: Vec3,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    images: &mut ResMut<Assets<Image>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) -> impl Bundle {
+    // get or add the mesh handle
+    let mesh_handle = match meshes.ids().collect::<Vec<_>>().first() {
+        Some(x) => match meshes.get_strong_handle(*x) {
+            Some(x) => x,
+            None => panic!("No mesh found with the ID we just got somehow"),
+        },
+        None => meshes.add(Sphere::default().mesh().uv(32, 18)),
+    };
+
+    // get or add the material handle
+    let material_handle = match materials.ids().collect::<Vec<_>>().first() {
+        Some(x) => match materials.get_strong_handle(*x) {
+            Some(x) => x,
+            None => panic!("No material found with the ID we just got somehow"),
+        },
+        None => materials.add(StandardMaterial {
+            base_color_texture: Some(images.add(uv_debug_texture())),
+            ..default()
+        }),
+    };
+    (
+        Body { mass },
+        Position(position),
+        Velocity(velocity),
+        PbrBundle {
+            mesh: mesh_handle.clone(),
+            material: material_handle.clone(),
+            ..default()
+        },
+    )
+}
+
 fn initial_spawn(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let mesh_handle = meshes.add(Sphere::default().mesh().uv(32, 18));
-    let debug_material = materials.add(StandardMaterial {
-        base_color_texture: Some(images.add(uv_debug_texture())),
-        ..default()
-    });
-    commands.spawn((
-        Body { mass: 1. },
-        Position(Vec3 {
+    commands.spawn(body_bundle(
+        1.,
+        Vec3 {
             x: 0.,
             y: 0.,
             z: 2.,
-        }),
-        Velocity(Vec3 {
+        },
+        Vec3 {
             x: 0.,
             y: 1.,
             z: 0.,
-        }),
-        PbrBundle {
-            mesh: mesh_handle.clone(),
-            material: debug_material.clone(),
-            ..default()
         },
+        &mut meshes,
+        &mut images,
+        &mut materials,
     ));
-    commands.spawn((
-        Body { mass: 1. },
-        Position(Vec3 {
+    commands.spawn(body_bundle(
+        1.,
+        Vec3 {
             x: 0.,
             y: 0.,
             z: -2.,
-        }),
-        Velocity(Vec3 {
+        },
+        Vec3 {
             x: 0.,
             y: -1.,
             z: 0.,
-        }),
-        PbrBundle {
-            mesh: mesh_handle.clone(),
-            material: debug_material.clone(),
-            ..default()
         },
+        &mut meshes,
+        &mut images,
+        &mut materials,
     ));
 }
 
@@ -326,7 +361,8 @@ fn camera_spawn(mut commands: Commands) {
 }
 
 fn get_radius(body: Body) -> f32 {
-    body.mass.sqrt()
+    // divided by 2 because the default sphere has radius 0.5
+    body.mass.cbrt() / 2.
 }
 
 // sum gravitational forces on bodies to arrive at their acceleration, euler integrate acceleration to modify velocity
@@ -374,23 +410,26 @@ fn resolve_body_collisions(
     while let Some([(_entity1, mut body1, mut p1, mut v1), (entity2, mut body2, p2, v2)]) =
         query_next.fetch_next()
     {
-        let dist_collision = (get_radius(*body1) + get_radius(*body2)) / 2.;
+        let dist_collision = get_radius(*body1) + get_radius(*body2);
         let dist_actual = (p2.0 - p1.0).norm();
+
         // are the bodies colliding?
-        if dist_actual < dist_collision {
+        if dist_actual <= dist_collision {
             // calculate quantities we'll use
             let m1 = body1.mass;
             let m2 = body2.mass;
-            // net_mass cannot be 0 because of the strict inequality above
+            // if either entity's mass is 0, skip
+            if m1 == 0. || m2 == 0. {
+                continue;
+            }
+
             let net_mass = m1 + m2;
 
             // set entity1's position to the center of mass of the two
             p1.0 = (m1 * p1.0 + m2 * p2.0) / net_mass;
 
             // add entity2's momentum to entity1
-            let net_momentum = m1 * v1.0 + m2 * v2.0;
-            let final_vel = net_momentum / net_mass;
-            v1.0 = final_vel;
+            v1.0 = (m1 * v1.0 + m2 * v2.0) / net_mass;
             body1.mass = net_mass;
 
             // enqueue the removal of entity2 and set its mass to 0 (so it won't collide with anything else)
@@ -403,6 +442,6 @@ fn resolve_body_collisions(
 fn update_body_meshes(mut query: Query<(&mut Transform, &Position, &Body)>) {
     for (mut transform, position, body) in &mut query {
         transform.translation = position.0;
-        transform.scale = Vec3::ONE * body.mass.cbrt();
+        transform.scale = Vec3::ONE * get_radius(*body);
     }
 }
