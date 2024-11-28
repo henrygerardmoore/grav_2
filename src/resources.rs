@@ -3,15 +3,15 @@ use bevy::prelude::*;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum SpawnSelectionMode {
-    NONE,
-    SIZE,
-    SPEED,
-    FIRE,
+    None,
+    Size,
+    Speed,
+    Fire,
 }
 
 impl Default for SpawnSelectionMode {
     fn default() -> Self {
-        Self::NONE
+        Self::None
     }
 }
 

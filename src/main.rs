@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use bevy::{prelude::*, window::Cursor};
 
 mod components;
@@ -8,7 +9,6 @@ mod systems;
 use resources::*;
 use systems::*;
 
-// TODO(henrygerardmoore): add CI job building linux, macOS, and windows executables for download
 // TODO(henrygerardmoore): test on macOS
 fn main() {
     App::new()

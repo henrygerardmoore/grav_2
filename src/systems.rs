@@ -3,12 +3,15 @@ use bevy::{
     input::mouse::{MouseMotion, MouseWheel},
     math::NormedVectorSpace,
     prelude::*,
-    window::PrimaryWindow,
+    window::{CursorGrabMode, PrimaryWindow},
 };
 
-use crate::{components::{Body, HelpText, HelpUI, Position, SpawnText, SpawnUI, Velocity}, helpers::{body_bundle, uv_debug_texture}};
 use crate::helpers::{get_mass, get_radius};
 use crate::resources::{BodySpawningOptions, SpawnSelectionMode, SphereInfo, TimePaused, TimeRate};
+use crate::{
+    components::{Body, HelpText, HelpUI, Position, SpawnText, SpawnUI, Velocity},
+    helpers::{body_bundle, uv_debug_texture},
+};
 
 // TODO(henrygerardmoore): add loadable config file that controls below consts (as well as full screen/resolution, etc.) through a `Resource`
 const G: f32 = 8.;
@@ -21,12 +24,12 @@ const SPAWN_SIZE_MAX: f32 = 5.;
 const TIME_RATE_SENSITIVITY: f32 = 0.1;
 const SPEED_MOD_FACTOR: f32 = 5.;
 
-pub fn text_section(color: Srgba, value: &str) -> TextSection {
+pub fn text_section(color: Color, value: &str) -> TextSection {
     TextSection::new(
         value,
         TextStyle {
             font_size: 40.0,
-            color: color.into(),
+            color,
             ..default()
         },
     )
@@ -56,7 +59,7 @@ pub fn spawn_help(mut commands: Commands) {
                         "Controls",
                         TextStyle {
                             font_size: 72.0,
-                            color: Color::WHITE.into(),
+                            color: Color::WHITE,
                             ..default()
                         },
                     ),
@@ -64,66 +67,57 @@ pub fn spawn_help(mut commands: Commands) {
                         "\n\nGeneral",
                         TextStyle {
                             font_size: 60.,
-                            color: Color::WHITE.into(),
+                            color: Color::WHITE,
                             ..default()
                         },
                     ),
-                    text_section(Color::WHITE.into(), "\nH to show or hide this help display"),
-                    text_section(Color::WHITE.into(), "\nR to reset the simulation"),
-                    text_section(Color::WHITE.into(), "\nEsc to quit"),
+                    text_section(Color::WHITE, "\nH to show or hide this help display"),
+                    text_section(Color::WHITE, "\nR to reset the simulation"),
+                    text_section(Color::WHITE, "\nEsc to quit"),
                     text_section(
-                        Color::WHITE.into(),
+                        Color::WHITE,
                         "\nShift to increase speed (of any other control)",
                     ),
                     text_section(
-                        Color::WHITE.into(),
+                        Color::WHITE,
                         "\nAlt to decrease speed (of any other control)",
                     ),
                     TextSection::new(
                         "\n\nMovement",
                         TextStyle {
                             font_size: 60.,
-                            color: Color::WHITE.into(),
+                            color: Color::WHITE,
                             ..default()
                         },
                     ),
-                    text_section(Color::WHITE.into(), "\nWASD to move laterally"),
-                    text_section(Color::WHITE.into(), "\nMouse to look"),
+                    text_section(Color::WHITE, "\nWASD to move laterally"),
+                    text_section(Color::WHITE, "\nMouse to look"),
                     TextSection::new(
                         "\n\nSpawning",
                         TextStyle {
                             font_size: 60.,
-                            color: Color::WHITE.into(),
+                            color: Color::WHITE,
                             ..default()
                         },
                     ),
+                    text_section(Color::WHITE, "\nF or click middle mouse to spawn a body"),
                     text_section(
-                        Color::WHITE.into(),
-                        "\nF or click middle mouse to spawn a body",
-                    ),
-                    text_section(
-                        Color::WHITE.into(),
+                        Color::WHITE,
                         "\nScroll mouse wheel to modify selected spawn option",
                     ),
-                    text_section(Color::WHITE.into(), "\nLeft click to select spawn speed"),
-                    text_section(Color::WHITE.into(), "\nRight click to select spawn size"),
+                    text_section(Color::WHITE, "\nLeft click to select spawn speed"),
+                    text_section(Color::WHITE, "\nRight click to select spawn size"),
                     TextSection::new(
                         "\n\nTime",
                         TextStyle {
                             font_size: 60.,
-                            color: Color::WHITE.into(),
+                            color: Color::WHITE,
                             ..default()
                         },
                     ),
-                    text_section(Color::WHITE.into(), "\nP to pause time"),
-                    text_section(
-                        Color::WHITE.into(),
-                        "\nEquals key to increase simulation rate",
-                    ),
-                    text_section(
-                        Color::WHITE.into(),
-                        "\nHyphen key to decrease simulation rate",
-                    ),
+                    text_section(Color::WHITE, "\nP to pause time"),
+                    text_section(Color::WHITE, "\nEquals key to increase simulation rate"),
+                    text_section(Color::WHITE, "\nHyphen key to decrease simulation rate"),
                 ])
                 .with_text_justify(JustifyText::Center),
                 HelpText,
@@ -163,12 +157,12 @@ pub fn create_osd(mut commands: Commands) {
         .with_children(|c| {
             c.spawn((
                 TextBundle::from_sections([
-                    text_section(Color::BLACK.into(), "Body spawn speed: "),
-                    text_section(Color::BLACK.into(), ""),
-                    text_section(Color::BLACK.into(), "\nBody spawn size: "),
-                    text_section(Color::BLACK.into(), ""),
-                    text_section(Color::BLACK.into(), "\nTime speed: "),
-                    text_section(Color::BLACK.into(), ""),
+                    text_section(Color::BLACK, "Body spawn speed: "),
+                    text_section(Color::BLACK, ""),
+                    text_section(Color::BLACK, "\nBody spawn size: "),
+                    text_section(Color::BLACK, ""),
+                    text_section(Color::BLACK, "\nTime speed: "),
+                    text_section(Color::BLACK, ""),
                 ]),
                 SpawnText,
             ));
@@ -185,11 +179,11 @@ pub fn update_osd(
     text.sections[1].value = format!("{0:.2}", spawn_options.speed);
     text.sections[3].value = format!("{0:.2}", spawn_options.radius);
     match spawn_options.mode {
-        SpawnSelectionMode::SIZE => {
+        SpawnSelectionMode::Size => {
             text.sections[3].style.color = Color::srgb(1., 0., 0.);
             text.sections[1].style.color = Color::BLACK;
         }
-        SpawnSelectionMode::SPEED => {
+        SpawnSelectionMode::Speed => {
             text.sections[1].style.color = Color::srgb(1., 0., 0.);
             text.sections[3].style.color = Color::BLACK;
         }
@@ -212,8 +206,8 @@ pub fn reset_bodies(
     sphere_info: Res<SphereInfo>,
 ) {
     if keys.just_pressed(KeyCode::KeyR) {
-        let mut entity_iter = query.iter();
-        while let Some(entity) = entity_iter.next() {
+        let entity_iter = query.iter();
+        for entity in entity_iter {
             commands.entity(entity).despawn();
         }
         initial_spawn(commands, sphere_info);
@@ -226,15 +220,14 @@ pub fn reset_camera(
     mut commands: Commands,
 ) {
     if keys.just_pressed(KeyCode::KeyR) {
-        let mut entity_iter = query.iter();
-        while let Some(entity) = entity_iter.next() {
+        let entity_iter = query.iter();
+        for entity in entity_iter {
             commands.entity(entity).despawn();
         }
         camera_spawn(commands);
     }
 }
 
-// TODO(henrygerardmoore): fix on windows
 pub fn capture_or_release_cursor(
     mut window: Query<&mut Window, With<PrimaryWindow>>,
     frames: Res<FrameCount>,
@@ -246,7 +239,11 @@ pub fn capture_or_release_cursor(
         let mut primary_window = window.single_mut();
         if primary_window.focused {
             primary_window.cursor.visible = false;
+            primary_window.cursor.grab_mode = CursorGrabMode::Locked;
+            primary_window.mode = bevy::window::WindowMode::Fullscreen;
         } else {
+            primary_window.cursor.grab_mode = CursorGrabMode::None;
+            primary_window.mode = bevy::window::WindowMode::BorderlessFullscreen;
             primary_window.cursor.visible = true;
             paused.0 = true;
         }
@@ -288,14 +285,14 @@ pub fn mouse_button_input(
     }
     for ev in evr_scroll.read() {
         match spawn_options.mode {
-            SpawnSelectionMode::NONE => continue,
-            SpawnSelectionMode::SIZE => {
+            SpawnSelectionMode::None => continue,
+            SpawnSelectionMode::Size => {
                 spawn_options.radius += ev.y * SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY * sens_mod
             }
-            SpawnSelectionMode::SPEED => {
+            SpawnSelectionMode::Speed => {
                 spawn_options.speed += ev.y * SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY * sens_mod
             }
-            SpawnSelectionMode::FIRE => continue,
+            SpawnSelectionMode::Fire => continue,
         }
     }
     spawn_options.radius = spawn_options.radius.clamp(
@@ -304,18 +301,18 @@ pub fn mouse_button_input(
     );
     spawn_options.speed = spawn_options.speed.clamp(0., SPAWN_SPEED_MAX);
     if buttons.just_pressed(MouseButton::Left) {
-        spawn_options.mode = SpawnSelectionMode::SPEED;
+        spawn_options.mode = SpawnSelectionMode::Speed;
     }
     if buttons.just_pressed(MouseButton::Right) {
-        spawn_options.mode = SpawnSelectionMode::SIZE;
+        spawn_options.mode = SpawnSelectionMode::Size;
     }
     if buttons.just_pressed(MouseButton::Middle) || keys.just_pressed(KeyCode::KeyF) {
-        spawn_options.mode = SpawnSelectionMode::FIRE;
+        spawn_options.mode = SpawnSelectionMode::Fire;
     }
 
     // check if we need to spawn
-    if spawn_options.mode == SpawnSelectionMode::FIRE {
-        spawn_options.mode = SpawnSelectionMode::NONE;
+    if spawn_options.mode == SpawnSelectionMode::Fire {
+        spawn_options.mode = SpawnSelectionMode::None;
         let tf = camera.single();
         if spawn_options.radius <= 0. {
             return;

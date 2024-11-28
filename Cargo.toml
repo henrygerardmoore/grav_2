@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.14.2", features = ["wayland"]}
+bevy = { version = "0.14.2"}
 # for cross compiling to windows with msvc
 blake3 = { version = "1.5", features = [ "pure" ] }
 
