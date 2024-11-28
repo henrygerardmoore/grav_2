@@ -10,8 +10,9 @@ use bevy::{
     window::{Cursor, CursorGrabMode, PrimaryWindow},
 };
 
-// TODO(henrygerardmoore): add loadable config file
 pub struct GravPlugin;
+
+// TODO(henrygerardmoore): add loadable config file that controls below consts (as well as full screen/resolution, etc.)
 const G: f32 = 8.;
 const MOUSE_SENSITIVITY: f32 = 0.002; // ?
 const CAMERA_SPEED: f32 = 5.; // m/s
