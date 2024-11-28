@@ -73,6 +73,7 @@ pub fn spawn_help(mut commands: Commands) {
                         },
                     ),
                     text_section(Color::WHITE.into(), "\nH to show or hide this help display"),
+                    text_section(Color::WHITE.into(), "\nR to reset the simulation"),
                     text_section(Color::WHITE.into(), "\nEsc to quit"),
                     text_section(
                         Color::WHITE.into(),
