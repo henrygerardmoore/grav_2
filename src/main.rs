@@ -13,9 +13,12 @@ pub struct GravPlugin;
 const G: f32 = 8.;
 const MOUSE_SENSITIVITY: f32 = 0.002; // ?
 const CAMERA_SPEED: f32 = 5.; // m/s
-const SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY: f32 = 1.;
-const SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY: f32 = 1.;
+const SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY: f32 = 0.05;
+const SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY: f32 = 0.05;
+const SPAWN_SPEED_MAX: f32 = 20.;
+const SPAWN_SIZE_MAX: f32 = 5.;
 
+// TODO(henrygerardmoore): extract functions to files and import instead of giant main.rs
 fn main() {
     App::new()
         .add_plugins(
@@ -42,6 +45,7 @@ fn main() {
         .add_systems(Update, pause_time)
         .add_systems(Startup, (create_sphere_info, initial_spawn).chain())
         .add_systems(Startup, camera_spawn)
+        .add_systems(Startup, create_spawn_display)
         .add_systems(
             Update,
             (
@@ -59,14 +63,55 @@ fn main() {
         .add_systems(Update, rotate_camera)
         .add_systems(Update, move_camera)
         .add_systems(Update, reset_sim)
+        .add_systems(Update, update_spawn_display)
         .run();
+}
+
+// see bevymark.rs
+fn create_spawn_display(mut commands: Commands) {
+    let text_section = move |color: Srgba, value: &str| {
+        TextSection::new(
+            value,
+            TextStyle {
+                font_size: 40.0,
+                color: color.into(),
+                ..default()
+            },
+        )
+    };
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                position_type: PositionType::Absolute,
+                padding: UiRect::all(Val::Px(5.0)),
+                ..default()
+            },
+            z_index: ZIndex::Global(i32::MAX),
+            background_color: Color::WHITE.with_alpha(0.75).into(),
+            ..default()
+        })
+        .with_children(|c| {
+            c.spawn(TextBundle::from_sections([
+                text_section(Color::BLACK.into(), "Body spawn options"),
+                text_section(Color::BLACK.into(), "\nSpeed: "),
+                text_section(Color::BLACK.into(), ""),
+                text_section(Color::BLACK.into(), "\nSize: "),
+                text_section(Color::BLACK.into(), ""),
+            ]));
+        });
+}
+
+fn update_spawn_display(mut query: Query<&mut Text>, spawn_options: Res<BodySpawningOptions>) {
+    let mut text = query.single_mut();
+    text.sections[2].value = format!("{0:.2}", spawn_options.speed);
+    text.sections[4].value = format!("{0:.2}", spawn_options.size);
 }
 
 fn reset_sim(
     keys: Res<ButtonInput<KeyCode>>,
     query: Query<Entity, With<Body>>,
     mut commands: Commands,
-    sphere_info : Res<SphereInfo>
+    sphere_info: Res<SphereInfo>,
 ) {
     if keys.just_pressed(KeyCode::KeyR) {
         let mut entity_iter = query.iter();
@@ -149,7 +194,7 @@ fn mouse_button_input(
     mut spawn_options: ResMut<BodySpawningOptions>,
     mut evr_scroll: EventReader<MouseWheel>,
     mut commands: Commands,
-    sphere_info : Res<SphereInfo>,
+    sphere_info: Res<SphereInfo>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     for ev in evr_scroll.read() {
@@ -164,8 +209,8 @@ fn mouse_button_input(
             SpawnSelectionMode::FIRE => continue,
         }
     }
-    spawn_options.size = spawn_options.size.clamp(0., 5.);
-    spawn_options.speed = spawn_options.speed.clamp(0., 5.);
+    spawn_options.size = spawn_options.size.clamp(0., SPAWN_SIZE_MAX);
+    spawn_options.speed = spawn_options.speed.clamp(0., SPAWN_SPEED_MAX);
     if buttons.just_pressed(MouseButton::Left) {
         spawn_options.mode = SpawnSelectionMode::SPEED;
     }
@@ -176,7 +221,7 @@ fn mouse_button_input(
         spawn_options.mode = SpawnSelectionMode::FIRE;
     }
 
-    //TODO(henrygerardmoore): display current options on screen
+    //TODO(henrygerardmoore): add ghostly display of spawn
 
     // check if we need to spawn
     if spawn_options.mode == SpawnSelectionMode::FIRE {
@@ -185,15 +230,17 @@ fn mouse_button_input(
         if spawn_options.size <= 0. {
             return;
         }
+        // the radius is more natural to control than the mass
+        let mass = spawn_options.size.powf(3.);
         commands.spawn(body_bundle(
-            spawn_options.size,
+            mass,
             Vec3 {
                 x: tf.translation.x,
                 y: tf.translation.y,
                 z: tf.translation.z,
-            },
+            } + Vec3::from(tf.forward()),
             tf.forward() * spawn_options.speed,
-            &sphere_info
+            &sphere_info,
         ));
     }
 }
@@ -286,10 +333,11 @@ struct Velocity(Vec3);
 struct SphereInfo(Handle<Mesh>, Handle<StandardMaterial>);
 
 fn create_sphere_info(
-    mut sphere_info : ResMut<SphereInfo>,
+    mut sphere_info: ResMut<SphereInfo>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut images: ResMut<Assets<Image>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,) {
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     let mesh_handle = meshes.add(Sphere { radius: 1. }.mesh().uv(32, 18));
     let material_handle = materials.add(StandardMaterial {
         base_color_texture: Some(images.add(uv_debug_texture())),
@@ -299,12 +347,11 @@ fn create_sphere_info(
     sphere_info.1 = material_handle;
 }
 
-// TODO(henrygerardmoore): fix debug texture and extract mesh addition to other function
 fn body_bundle(
     mass: f32,
     position: Vec3,
     velocity: Vec3,
-    sphere_info : &Res<SphereInfo>,
+    sphere_info: &Res<SphereInfo>,
 ) -> impl Bundle {
     // get or add the mesh handle
     let mesh_handle = sphere_info.0.clone();
@@ -323,9 +370,7 @@ fn body_bundle(
     )
 }
 
-fn initial_spawn(
-    mut commands: Commands, sphere_info : Res<SphereInfo>,
-) {
+fn initial_spawn(mut commands: Commands, sphere_info: Res<SphereInfo>) {
     commands.spawn(body_bundle(
         1.,
         Vec3 {
@@ -338,7 +383,7 @@ fn initial_spawn(
             y: 1.,
             z: 0.,
         },
-        &sphere_info
+        &sphere_info,
     ));
     commands.spawn(body_bundle(
         1.,
@@ -352,7 +397,7 @@ fn initial_spawn(
             y: -1.,
             z: 0.,
         },
-        &sphere_info
+        &sphere_info,
     ));
 }
 
