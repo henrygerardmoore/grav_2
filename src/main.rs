@@ -219,6 +219,7 @@ fn reset_camera(
     }
 }
 
+// TODO(henrygerardmoore): fix on windows
 fn capture_or_release_cursor(
     mut window: Query<&mut Window, With<PrimaryWindow>>,
     frames: Res<FrameCount>,
