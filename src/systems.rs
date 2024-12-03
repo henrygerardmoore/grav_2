@@ -6,23 +6,15 @@ use bevy::{
     window::{CursorGrabMode, PrimaryWindow},
 };
 
-use crate::helpers::{get_mass, get_radius};
 use crate::resources::{BodySpawningOptions, SpawnSelectionMode, SphereInfo, TimePaused, TimeRate};
 use crate::{
     components::{Body, HelpText, HelpUI, Position, SpawnText, SpawnUI, Velocity},
     helpers::{body_bundle, uv_debug_texture},
 };
-
-// TODO(henrygerardmoore): add loadable config file that controls below consts (as well as full screen/resolution, etc.) through a `Resource`
-const G: f32 = 8.;
-const MOUSE_SENSITIVITY: f32 = 0.002; // ?
-const CAMERA_SPEED: f32 = 5.; // m/s
-const SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY: f32 = 0.05;
-const SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY: f32 = 0.05;
-const SPAWN_SPEED_MAX: f32 = 20.;
-const SPAWN_SIZE_MAX: f32 = 5.;
-const TIME_RATE_SENSITIVITY: f32 = 0.1;
-const SPEED_MOD_FACTOR: f32 = 5.;
+use crate::{
+    config::Configuration,
+    helpers::{get_mass, get_radius},
+};
 
 pub fn text_section(color: Color, value: &str) -> TextSection {
     TextSection::new(
@@ -234,20 +226,25 @@ pub fn reset_camera(
     }
 }
 
+#[derive(Resource, Clone, Copy, Default)]
+pub struct LastFrameUnlocked(u32);
+
 pub fn capture_or_release_cursor(
     mut window: Query<&mut Window, With<PrimaryWindow>>,
     frames: Res<FrameCount>,
     mut paused: ResMut<TimePaused>,
+    mut last_frame_unlocked: ResMut<LastFrameUnlocked>,
 ) {
     // https://github.com/bevyengine/bevy/issues/16238
     // wait for a bit before capturing the cursor
-    if frames.0 >= 6 {
+    if frames.0 >= 10 && frames.0 - last_frame_unlocked.0 > 20 {
         let mut primary_window = window.single_mut();
         if primary_window.focused {
             primary_window.cursor.visible = false;
             primary_window.cursor.grab_mode = CursorGrabMode::Locked;
             primary_window.mode = bevy::window::WindowMode::Fullscreen;
         } else {
+            last_frame_unlocked.0 = frames.0;
             primary_window.cursor.grab_mode = CursorGrabMode::None;
             primary_window.mode = bevy::window::WindowMode::BorderlessFullscreen;
             primary_window.cursor.visible = true;
@@ -260,52 +257,22 @@ pub fn capture_or_release_cursor(
 pub fn rotate_camera(
     mut mouse_motion: EventReader<MouseMotion>,
     mut camera: Query<&mut Transform, With<Camera>>,
+    config: Res<Configuration>,
 ) {
     let mut transform = camera.single_mut();
     for motion in mouse_motion.read() {
-        let yaw = -motion.delta.x * MOUSE_SENSITIVITY;
-        let pitch = -motion.delta.y * MOUSE_SENSITIVITY;
+        let yaw = -motion.delta.x * config.mouse_sensitivity;
+        let pitch = -motion.delta.y * config.mouse_sensitivity;
         transform.rotate_y(yaw);
         transform.rotate_local_x(pitch);
     }
 }
 
-pub fn mouse_button_input(
+pub fn spawn_mode_selection(
     buttons: Res<ButtonInput<MouseButton>>,
-    camera: Query<&Transform, With<Camera>>,
-    mut spawn_options: ResMut<BodySpawningOptions>,
-    mut evr_scroll: EventReader<MouseWheel>,
-    mut commands: Commands,
-    sphere_info: Res<SphereInfo>,
     keys: Res<ButtonInput<KeyCode>>,
+    mut spawn_options: ResMut<BodySpawningOptions>,
 ) {
-    // shift lets you control more coarsely
-    let mut sens_mod = if keys.pressed(KeyCode::ShiftLeft) {
-        SPEED_MOD_FACTOR
-    } else {
-        1.
-    };
-    // alt lets you control more finely
-    if keys.pressed(KeyCode::AltLeft) {
-        sens_mod /= SPEED_MOD_FACTOR;
-    }
-    for ev in evr_scroll.read() {
-        match spawn_options.mode {
-            SpawnSelectionMode::None => continue,
-            SpawnSelectionMode::Size => {
-                spawn_options.radius += ev.y * SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY * sens_mod
-            }
-            SpawnSelectionMode::Speed => {
-                spawn_options.speed += ev.y * SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY * sens_mod
-            }
-            SpawnSelectionMode::Fire => continue,
-        }
-    }
-    spawn_options.radius = spawn_options.radius.clamp(
-        SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY / SPEED_MOD_FACTOR,
-        SPAWN_SIZE_MAX,
-    );
-    spawn_options.speed = spawn_options.speed.clamp(0., SPAWN_SPEED_MAX);
     if buttons.just_pressed(MouseButton::Left) {
         spawn_options.mode = SpawnSelectionMode::Speed;
     }
@@ -315,7 +282,49 @@ pub fn mouse_button_input(
     if buttons.just_pressed(MouseButton::Middle) || keys.just_pressed(KeyCode::KeyF) {
         spawn_options.mode = SpawnSelectionMode::Fire;
     }
+}
 
+pub fn spawn_scrolling(
+    mut spawn_options: ResMut<BodySpawningOptions>,
+    mut evr_scroll: EventReader<MouseWheel>,
+    keys: Res<ButtonInput<KeyCode>>,
+    config: Res<Configuration>,
+) {
+    // shift lets you control more coarsely
+    let mut sens_mod = if keys.pressed(KeyCode::ShiftLeft) {
+        config.speed_mod_factor
+    } else {
+        1.
+    };
+    // alt lets you control more finely
+    if keys.pressed(KeyCode::AltLeft) {
+        sens_mod /= config.speed_mod_factor;
+    }
+    for ev in evr_scroll.read() {
+        match spawn_options.mode {
+            SpawnSelectionMode::None => continue,
+            SpawnSelectionMode::Size => {
+                spawn_options.radius += ev.y * config.spawn_size_mousewheel_sensitivity * sens_mod
+            }
+            SpawnSelectionMode::Speed => {
+                spawn_options.speed += ev.y * config.spawn_speed_mousewheel_sensitivity * sens_mod
+            }
+            SpawnSelectionMode::Fire => continue,
+        }
+    }
+    spawn_options.radius = spawn_options.radius.clamp(
+        config.spawn_size_mousewheel_sensitivity / config.speed_mod_factor,
+        config.spawn_size_max,
+    );
+    spawn_options.speed = spawn_options.speed.clamp(0., config.spawn_speed_max);
+}
+
+pub fn spawn(
+    camera: Query<&Transform, With<Camera>>,
+    mut commands: Commands,
+    sphere_info: Res<SphereInfo>,
+    mut spawn_options: ResMut<BodySpawningOptions>,
+) {
     // check if we need to spawn
     if spawn_options.mode == SpawnSelectionMode::Fire {
         spawn_options.mode = SpawnSelectionMode::None;
@@ -341,17 +350,18 @@ pub fn move_camera(
     keys: Res<ButtonInput<KeyCode>>,
     mut camera: Query<&mut Transform, With<Camera>>,
     time: Res<Time>,
+    config: Res<Configuration>,
 ) {
     // move faster when shift is held
     let mut speed_mod = if keys.pressed(KeyCode::ShiftLeft) {
-        SPEED_MOD_FACTOR
+        config.speed_mod_factor
     } else {
         1.
     };
     if keys.pressed(KeyCode::AltLeft) {
-        speed_mod /= SPEED_MOD_FACTOR;
+        speed_mod /= config.speed_mod_factor;
     }
-    let motion_distance = time.delta_seconds() * CAMERA_SPEED * speed_mod;
+    let motion_distance = time.delta_seconds() * config.camera_speed * speed_mod;
     let mut transform = camera.single_mut();
     let mut net_translation = Vec3::ZERO;
     if keys.pressed(KeyCode::KeyW) {
@@ -379,28 +389,31 @@ pub fn modify_time(
     keys: Res<ButtonInput<KeyCode>>,
     mut paused: ResMut<TimePaused>,
     mut rate: ResMut<TimeRate>,
+    config: Res<Configuration>,
 ) {
     // shift lets you control more coarsely
     let mut sens_mod = if keys.pressed(KeyCode::ShiftLeft) {
-        SPEED_MOD_FACTOR
+        config.speed_mod_factor
     } else {
         1.
     };
 
     // alt lets you control more finely
     if keys.pressed(KeyCode::AltLeft) {
-        sens_mod /= SPEED_MOD_FACTOR;
+        sens_mod /= config.speed_mod_factor;
     }
     if keys.just_pressed(KeyCode::KeyP) {
         paused.0 = !paused.0;
     }
     if keys.just_pressed(KeyCode::Equal) {
-        rate.0 += TIME_RATE_SENSITIVITY * sens_mod;
+        rate.0 += config.time_rate_sensitivity * sens_mod;
     }
     if keys.just_pressed(KeyCode::Minus) {
-        rate.0 -= TIME_RATE_SENSITIVITY * sens_mod;
+        rate.0 -= config.time_rate_sensitivity * sens_mod;
     }
-    rate.0 = rate.0.clamp(TIME_RATE_SENSITIVITY / SPEED_MOD_FACTOR, 10.);
+    rate.0 = rate
+        .0
+        .clamp(config.time_rate_sensitivity / config.speed_mod_factor, 10.);
 }
 
 pub fn exit_system(keys: Res<ButtonInput<KeyCode>>, mut exit: EventWriter<AppExit>) {
@@ -469,6 +482,7 @@ pub fn update_body_velocities(
     time: Res<Time>,
     paused: Res<TimePaused>,
     time_rate: Res<TimeRate>,
+    config: Res<Configuration>,
 ) {
     let dt = if paused.0 {
         0.
@@ -482,8 +496,8 @@ pub fn update_body_velocities(
         let r2 = p2.0 - p1.0;
         let r1 = -r2;
         let dist = r1.norm();
-        let a1 = G * m2 * r2 / dist.powf(3.);
-        let a2 = G * m1 * r1 / dist.powf(3.);
+        let a1 = config.gravity_constant * m2 * r2 / dist.powf(3.);
+        let a2 = config.gravity_constant * m1 * r1 / dist.powf(3.);
         v1.0 += a1 * dt;
         v2.0 += a2 * dt;
     }
