@@ -217,20 +217,25 @@ pub fn reset_camera(
     }
 }
 
+#[derive(Resource, Clone, Copy, Default)]
+pub struct LastFrameUnlocked(u32);
+
 pub fn capture_or_release_cursor(
     mut window: Query<&mut Window, With<PrimaryWindow>>,
     frames: Res<FrameCount>,
     mut paused: ResMut<TimePaused>,
+    mut last_frame_unlocked: ResMut<LastFrameUnlocked>
 ) {
     // https://github.com/bevyengine/bevy/issues/16238
     // wait for a bit before capturing the cursor
-    if frames.0 >= 10 {
+    if frames.0 >= 10 && frames.0 - last_frame_unlocked.0 > 20 {
         let mut primary_window = window.single_mut();
         if primary_window.focused {
             primary_window.cursor.visible = false;
             primary_window.cursor.grab_mode = CursorGrabMode::Locked;
             primary_window.mode = bevy::window::WindowMode::Fullscreen;
         } else {
+            last_frame_unlocked.0 = frames.0;
             primary_window.cursor.grab_mode = CursorGrabMode::None;
             primary_window.mode = bevy::window::WindowMode::BorderlessFullscreen;
             primary_window.cursor.visible = true;

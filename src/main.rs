@@ -67,6 +67,8 @@ fn main() {
         .insert_resource(BodySpawningOptions::default())
         // add configuration resource for use by systems
         .insert_resource(config)
+        // initialize cursor lock tracking
+        .insert_resource(LastFrameUnlocked::default())
 
         // add startup systems
         .add_systems(Startup, (create_sphere_info, initial_spawn).chain())
