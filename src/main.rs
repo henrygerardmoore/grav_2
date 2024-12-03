@@ -1,9 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use std::{
-    fs::File,
-    io::Read,
-    path::PathBuf
-};
+use std::{fs::File, io::Read, path::PathBuf};
 
 use bevy::{prelude::*, window::Cursor};
 
@@ -44,7 +40,9 @@ fn main() {
                     }
                 }
             } else {
-                println!("Couldn't read your config.json into a string, using default configuration");
+                println!(
+                    "Couldn't read your config.json into a string, using default configuration"
+                );
                 Configuration::default()
             }
         } else {

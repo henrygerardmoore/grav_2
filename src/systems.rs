@@ -6,11 +6,14 @@ use bevy::{
     window::{CursorGrabMode, PrimaryWindow},
 };
 
-use crate::{config::Configuration, helpers::{get_mass, get_radius}};
 use crate::resources::{BodySpawningOptions, SpawnSelectionMode, SphereInfo, TimePaused, TimeRate};
 use crate::{
     components::{Body, HelpText, HelpUI, Position, SpawnText, SpawnUI, Velocity},
     helpers::{body_bundle, uv_debug_texture},
+};
+use crate::{
+    config::Configuration,
+    helpers::{get_mass, get_radius},
 };
 
 pub fn text_section(color: Color, value: &str) -> TextSection {
@@ -230,7 +233,7 @@ pub fn capture_or_release_cursor(
     mut window: Query<&mut Window, With<PrimaryWindow>>,
     frames: Res<FrameCount>,
     mut paused: ResMut<TimePaused>,
-    mut last_frame_unlocked: ResMut<LastFrameUnlocked>
+    mut last_frame_unlocked: ResMut<LastFrameUnlocked>,
 ) {
     // https://github.com/bevyengine/bevy/issues/16238
     // wait for a bit before capturing the cursor
@@ -254,7 +257,7 @@ pub fn capture_or_release_cursor(
 pub fn rotate_camera(
     mut mouse_motion: EventReader<MouseMotion>,
     mut camera: Query<&mut Transform, With<Camera>>,
-    config: Res<Configuration>
+    config: Res<Configuration>,
 ) {
     let mut transform = camera.single_mut();
     for motion in mouse_motion.read() {
@@ -268,7 +271,8 @@ pub fn rotate_camera(
 pub fn spawn_mode_selection(
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
-    mut spawn_options: ResMut<BodySpawningOptions>,) {
+    mut spawn_options: ResMut<BodySpawningOptions>,
+) {
     if buttons.just_pressed(MouseButton::Left) {
         spawn_options.mode = SpawnSelectionMode::Speed;
     }
@@ -284,7 +288,7 @@ pub fn spawn_scrolling(
     mut spawn_options: ResMut<BodySpawningOptions>,
     mut evr_scroll: EventReader<MouseWheel>,
     keys: Res<ButtonInput<KeyCode>>,
-    config: Res<Configuration>
+    config: Res<Configuration>,
 ) {
     // shift lets you control more coarsely
     let mut sens_mod = if keys.pressed(KeyCode::ShiftLeft) {
@@ -319,7 +323,8 @@ pub fn spawn(
     camera: Query<&Transform, With<Camera>>,
     mut commands: Commands,
     sphere_info: Res<SphereInfo>,
-    mut spawn_options: ResMut<BodySpawningOptions>,) {
+    mut spawn_options: ResMut<BodySpawningOptions>,
+) {
     // check if we need to spawn
     if spawn_options.mode == SpawnSelectionMode::Fire {
         spawn_options.mode = SpawnSelectionMode::None;
@@ -345,7 +350,7 @@ pub fn move_camera(
     keys: Res<ButtonInput<KeyCode>>,
     mut camera: Query<&mut Transform, With<Camera>>,
     time: Res<Time>,
-    config: Res<Configuration>
+    config: Res<Configuration>,
 ) {
     // move faster when shift is held
     let mut speed_mod = if keys.pressed(KeyCode::ShiftLeft) {
@@ -384,7 +389,7 @@ pub fn modify_time(
     keys: Res<ButtonInput<KeyCode>>,
     mut paused: ResMut<TimePaused>,
     mut rate: ResMut<TimeRate>,
-    config: Res<Configuration>
+    config: Res<Configuration>,
 ) {
     // shift lets you control more coarsely
     let mut sens_mod = if keys.pressed(KeyCode::ShiftLeft) {
@@ -406,7 +411,9 @@ pub fn modify_time(
     if keys.just_pressed(KeyCode::Minus) {
         rate.0 -= config.time_rate_sensitivity * sens_mod;
     }
-    rate.0 = rate.0.clamp(config.time_rate_sensitivity / config.speed_mod_factor, 10.);
+    rate.0 = rate
+        .0
+        .clamp(config.time_rate_sensitivity / config.speed_mod_factor, 10.);
 }
 
 pub fn exit_system(keys: Res<ButtonInput<KeyCode>>, mut exit: EventWriter<AppExit>) {
@@ -475,7 +482,7 @@ pub fn update_body_velocities(
     time: Res<Time>,
     paused: Res<TimePaused>,
     time_rate: Res<TimeRate>,
-    config: Res<Configuration>
+    config: Res<Configuration>,
 ) {
     let dt = if paused.0 {
         0.
