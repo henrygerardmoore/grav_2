@@ -1997,6 +1997,8 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "blake3",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
