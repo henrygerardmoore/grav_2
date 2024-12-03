@@ -259,13 +259,24 @@ pub fn rotate_camera(
     }
 }
 
-pub fn mouse_button_input(
+pub fn spawn_mode_selection(
     buttons: Res<ButtonInput<MouseButton>>,
-    camera: Query<&Transform, With<Camera>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut spawn_options: ResMut<BodySpawningOptions>,) {
+    if buttons.just_pressed(MouseButton::Left) {
+        spawn_options.mode = SpawnSelectionMode::Speed;
+    }
+    if buttons.just_pressed(MouseButton::Right) {
+        spawn_options.mode = SpawnSelectionMode::Size;
+    }
+    if buttons.just_pressed(MouseButton::Middle) || keys.just_pressed(KeyCode::KeyF) {
+        spawn_options.mode = SpawnSelectionMode::Fire;
+    }
+}
+
+pub fn spawn_scrolling(
     mut spawn_options: ResMut<BodySpawningOptions>,
     mut evr_scroll: EventReader<MouseWheel>,
-    mut commands: Commands,
-    sphere_info: Res<SphereInfo>,
     keys: Res<ButtonInput<KeyCode>>,
     config: Res<Configuration>
 ) {
@@ -296,16 +307,13 @@ pub fn mouse_button_input(
         config.spawn_size_max,
     );
     spawn_options.speed = spawn_options.speed.clamp(0., config.spawn_speed_max);
-    if buttons.just_pressed(MouseButton::Left) {
-        spawn_options.mode = SpawnSelectionMode::Speed;
-    }
-    if buttons.just_pressed(MouseButton::Right) {
-        spawn_options.mode = SpawnSelectionMode::Size;
-    }
-    if buttons.just_pressed(MouseButton::Middle) || keys.just_pressed(KeyCode::KeyF) {
-        spawn_options.mode = SpawnSelectionMode::Fire;
-    }
+}
 
+pub fn spawn(
+    camera: Query<&Transform, With<Camera>>,
+    mut commands: Commands,
+    sphere_info: Res<SphereInfo>,
+    mut spawn_options: ResMut<BodySpawningOptions>,) {
     // check if we need to spawn
     if spawn_options.mode == SpawnSelectionMode::Fire {
         spawn_options.mode = SpawnSelectionMode::None;

@@ -109,7 +109,9 @@ fn main() {
         // changing time rate
         .add_systems(Update, modify_time)
         // spawning bodies
-        .add_systems(Update, mouse_button_input)
+        .add_systems(Update, spawn_mode_selection)
+        .add_systems(Update, spawn_scrolling)
+        .add_systems(Update, spawn)
         // camera
         .add_systems(Update, rotate_camera)
         .add_systems(Update, move_camera)
