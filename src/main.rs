@@ -5,6 +5,7 @@ mod components;
 mod helpers;
 mod resources;
 mod systems;
+mod config;
 
 use resources::*;
 use systems::*;
