@@ -1,24 +1,31 @@
-#[derive(Default, Clone)]
-struct Configuration {
-    gravity_constant: f32,
-    mouse_sensitivity: f32,
-    camera_speed: f32,
+use bevy::prelude::Resource;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Resource, Serialize, Deserialize)]
+pub struct Configuration {
+    pub gravity_constant: f32,
+    pub mouse_sensitivity: f32,
+    pub camera_speed: f32,
+    pub spawn_size_mousewheel_sensitivity: f32,
+    pub spawn_speed_mousewheel_sensitivity: f32,
+    pub spawn_speed_max: f32,
+    pub spawn_size_max: f32,
+    pub time_rate_sensitivity: f32,
+    pub speed_mod_factor: f32,
 }
 
 impl Default for Configuration {
     fn default() -> Self {
         Self {
-            gravity_constant: Default::default(),
-            mouse_sensitivity: Default::default(),
+            gravity_constant: 8.,
+            mouse_sensitivity: 0.002,
+            camera_speed: 5.,
+            spawn_size_mousewheel_sensitivity: 0.05,
+            spawn_speed_mousewheel_sensitivity: 0.05,
+            spawn_speed_max: 20.,
+            spawn_size_max: 5.,
+            time_rate_sensitivity: 0.1,
+            speed_mod_factor: 5.,
         }
     }
 }
-const G: f32 = 8.;
-const MOUSE_SENSITIVITY: f32 = 0.002; // ?
-const CAMERA_SPEED: f32 = 5.; // m/s
-const SPAWN_SIZE_MOUSEWHEEL_SENSITIVITY: f32 = 0.05;
-const SPAWN_SPEED_MOUSEWHEEL_SENSITIVITY: f32 = 0.05;
-const SPAWN_SPEED_MAX: f32 = 20.;
-const SPAWN_SIZE_MAX: f32 = 5.;
-const TIME_RATE_SENSITIVITY: f32 = 0.1;
-const SPEED_MOD_FACTOR: f32 = 5.;

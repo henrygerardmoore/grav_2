@@ -7,6 +7,8 @@ edition = "2021"
 bevy = { version = "0.14.2"}
 # for cross compiling to windows with msvc
 blake3 = { version = "1.5", features = [ "pure" ] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
