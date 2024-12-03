@@ -24,6 +24,12 @@ pub fn text_section(color: Color, value: &str) -> TextSection {
     )
 }
 
+pub fn scale_ui(window: Query<&Window, With<PrimaryWindow>>, mut ui_scale: ResMut<UiScale>) {
+    let primary_window = window.single();
+    // the on-screen text was created on a 1440p screen so scale based off that
+    ui_scale.0 = primary_window.height() / 1440.;
+}
+
 pub fn spawn_help(mut commands: Commands) {
     commands
         .spawn((

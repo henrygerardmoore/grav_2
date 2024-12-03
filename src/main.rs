@@ -121,5 +121,6 @@ fn main() {
         // general
         .add_systems(Update, capture_or_release_cursor)
         .add_systems(Update, exit_system)
+        .add_systems(Update, scale_ui)
         .run();
 }
