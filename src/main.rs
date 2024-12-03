@@ -2,6 +2,7 @@
 use std::{
     fs::File,
     io::Read,
+    path::PathBuf
 };
 
 use bevy::{prelude::*, window::Cursor};
@@ -17,19 +18,37 @@ use resources::*;
 use systems::*;
 
 // TODO(henrygerardmoore): test on macOS
+// TODO(henrygerardmoore): allow bodies to be spawned from a config file
 fn main() {
-    let config = if let Ok(mut f) = File::open("config.json") {
-        let mut data = String::new();
-        if f.read_to_string(&mut data).is_ok() {
-            match serde_json::from_str(&data) {
-                Ok(j) => j,
-                Err(_) => {
-                    println!("Could not read your config.json");
-                    Configuration::default()
+    let config_path: Option<PathBuf> = if let Ok(path) = std::env::current_exe() {
+        match path.parent() {
+            Some(parent_path) => Some(parent_path.to_path_buf().join("config.json")),
+            None => {
+                println!("Could not open the executable's parent directory, using default configuration.");
+                None
+            }
+        }
+    } else {
+        println!("Could not get the executable's directory, using default configuration.");
+        None
+    };
+    let config = if config_path.is_some() {
+        if let Ok(mut f) = File::open(config_path.unwrap()) {
+            let mut data = String::new();
+            if f.read_to_string(&mut data).is_ok() {
+                match serde_json::from_str(&data) {
+                    Ok(j) => j,
+                    Err(_) => {
+                        println!("Could not read your config.json into json, using default configuration");
+                        Configuration::default()
+                    }
                 }
+            } else {
+                println!("Couldn't read your config.json into a string, using default configuration");
+                Configuration::default()
             }
         } else {
-            println!("Couldn't read config.json as a string");
+            // file doesn't exist. That's fine, just use default config
             Configuration::default()
         }
     } else {
@@ -54,7 +73,6 @@ fn main() {
                     ..default()
                 }),
         )
-
         // make the background look like space
         .insert_resource(ClearColor(Color::BLACK))
         // start unpaused
@@ -69,13 +87,11 @@ fn main() {
         .insert_resource(config)
         // initialize cursor lock tracking
         .insert_resource(LastFrameUnlocked::default())
-
         // add startup systems
         .add_systems(Startup, (create_sphere_info, initial_spawn).chain())
         .add_systems(Startup, camera_spawn)
         .add_systems(Startup, create_osd)
         .add_systems(Startup, spawn_help)
-
         // integration (must be performed in order)
         .add_systems(
             Update,
