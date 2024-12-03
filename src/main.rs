@@ -59,5 +59,6 @@ fn main() {
         .add_systems(Update, update_osd)
         .add_systems(Startup, spawn_help)
         .add_systems(Update, show_hide_help)
+        .add_systems(Update, scale_ui)
         .run();
 }
