@@ -61,7 +61,7 @@ fn main() {
                     primary_window: Some(Window {
                         title: "Henry's 3D N-body gravity sim!".into(),
                         name: Some("grav_2.app".into()),
-                        mode: bevy::window::WindowMode::Fullscreen,
+                        mode: bevy::window::WindowMode::BorderlessFullscreen,
                         cursor: Cursor {
                             visible: false,
                             ..default()
@@ -79,8 +79,6 @@ fn main() {
         .insert_resource(BodySpawningOptions::default())
         // add configuration resource for use by systems
         .insert_resource(config)
-        // initialize cursor lock tracking
-        .insert_resource(LastFrameUnlocked::default())
         // add startup systems
         .add_systems(Startup, (create_sphere_info, initial_spawn).chain())
         .add_systems(Startup, camera_spawn)

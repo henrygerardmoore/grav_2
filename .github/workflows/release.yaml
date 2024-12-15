@@ -95,7 +95,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ${{ env.binary }}.zip
           asset_name: ${{ env.binary }}-windows.zip
-          tag: ${{ github.ref }}
+          tag: release
           overwrite: true
 
   # Build for MacOS x86_64
@@ -137,7 +137,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file:  ${{ env.binary }}-macOS-intel.dmg
           asset_name: ${{ env.binary }}-macOS-intel.dmg
-          tag: ${{ github.ref }}
+          tag: release
           overwrite: true
 
   # Build for MacOS Apple Silicon
@@ -179,5 +179,5 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ${{ env.binary }}-macOS-apple-silicon.dmg
           asset_name: ${{ env.binary }}-macOS-apple-silicon.dmg
-          tag: ${{ github.ref }}
+          tag: release
           overwrite: true
