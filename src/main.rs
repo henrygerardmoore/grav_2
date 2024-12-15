@@ -73,12 +73,8 @@ fn main() {
         )
         // make the background look like space
         .insert_resource(ClearColor(Color::BLACK))
-        // start unpaused
-        .insert_resource(TimePaused(false))
         // insert the common sphere that all bodies use
         .insert_resource(SphereInfo::default())
-        // start at 1x time
-        .insert_resource(TimeRate(1.))
         // start the spawn selection at default
         .insert_resource(BodySpawningOptions::default())
         // add configuration resource for use by systems

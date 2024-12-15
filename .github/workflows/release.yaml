@@ -53,7 +53,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ${{ env.binary }}.zip
           asset_name: ${{ env.binary }}-linux.zip
-          tag: ${{ github.ref }}
+          tag: release
           overwrite: true
 
   # Build for Windows

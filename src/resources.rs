@@ -33,11 +33,5 @@ impl Default for BodySpawningOptions {
     }
 }
 
-#[derive(Resource, Clone, Copy)]
-pub struct TimePaused(pub bool);
-
 #[derive(Resource, Clone, Default)]
 pub struct SphereInfo(pub Handle<Mesh>, pub Handle<StandardMaterial>);
-
-#[derive(Resource, Clone, Copy)]
-pub struct TimeRate(pub f32);
