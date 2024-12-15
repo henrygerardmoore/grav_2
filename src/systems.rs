@@ -6,7 +6,7 @@ use bevy::{
     window::{CursorGrabMode, PrimaryWindow},
 };
 
-use crate::resources::{BodySpawningOptions, SpawnSelectionMode, SphereInfo, TimePaused, TimeRate};
+use crate::resources::{BodySpawningOptions, SpawnSelectionMode, SphereInfo};
 use crate::{
     components::{Body, HelpText, HelpUI, Position, SpawnText, SpawnUI, Velocity},
     helpers::{body_bundle, uv_debug_texture},
@@ -170,8 +170,7 @@ pub fn create_osd(mut commands: Commands) {
 pub fn update_osd(
     mut query: Query<&mut Text, With<SpawnText>>,
     spawn_options: Res<BodySpawningOptions>,
-    time_rate: Res<TimeRate>,
-    time_paused: Res<TimePaused>,
+    time: Res<Time<Virtual>>,
 ) {
     let mut text = query.single_mut();
     text.sections[1].value = format!("{0:.2}", spawn_options.speed);
@@ -190,10 +189,10 @@ pub fn update_osd(
             text.sections[3].style.color = Color::BLACK;
         }
     };
-    if time_paused.0 {
+    if time.is_paused() {
         text.sections[5].value = "paused".into();
     } else {
-        text.sections[5].value = format!("{0:.2}x", time_rate.0);
+        text.sections[5].value = format!("{0:.2}x", time.relative_speed());
     }
 }
 
@@ -232,7 +231,7 @@ pub struct LastFrameUnlocked(u32);
 pub fn capture_or_release_cursor(
     mut window: Query<&mut Window, With<PrimaryWindow>>,
     frames: Res<FrameCount>,
-    mut paused: ResMut<TimePaused>,
+    mut time: ResMut<Time<Virtual>>,
     mut last_frame_unlocked: ResMut<LastFrameUnlocked>,
 ) {
     // https://github.com/bevyengine/bevy/issues/16238
@@ -248,7 +247,7 @@ pub fn capture_or_release_cursor(
             primary_window.cursor.grab_mode = CursorGrabMode::None;
             primary_window.mode = bevy::window::WindowMode::BorderlessFullscreen;
             primary_window.cursor.visible = true;
-            paused.0 = true;
+            time.pause();
         }
     }
 }
@@ -349,7 +348,7 @@ pub fn spawn(
 pub fn move_camera(
     keys: Res<ButtonInput<KeyCode>>,
     mut camera: Query<&mut Transform, With<Camera>>,
-    time: Res<Time>,
+    time: Res<Time<Real>>,
     config: Res<Configuration>,
 ) {
     // move faster when shift is held
@@ -387,8 +386,7 @@ pub fn move_camera(
 
 pub fn modify_time(
     keys: Res<ButtonInput<KeyCode>>,
-    mut paused: ResMut<TimePaused>,
-    mut rate: ResMut<TimeRate>,
+    mut time: ResMut<Time<Virtual>>,
     config: Res<Configuration>,
 ) {
     // shift lets you control more coarsely
@@ -403,17 +401,21 @@ pub fn modify_time(
         sens_mod /= config.speed_mod_factor;
     }
     if keys.just_pressed(KeyCode::KeyP) {
-        paused.0 = !paused.0;
+        if time.is_paused() {
+            time.unpause();
+        } else {
+            time.pause();
+        }
     }
+    let mut rate = time.relative_speed();
     if keys.just_pressed(KeyCode::Equal) {
-        rate.0 += config.time_rate_sensitivity * sens_mod;
+        rate += config.time_rate_sensitivity * sens_mod;
     }
     if keys.just_pressed(KeyCode::Minus) {
-        rate.0 -= config.time_rate_sensitivity * sens_mod;
+        rate -= config.time_rate_sensitivity * sens_mod;
     }
-    rate.0 = rate
-        .0
-        .clamp(config.time_rate_sensitivity / config.speed_mod_factor, 10.);
+    rate = rate.clamp(config.time_rate_sensitivity / config.speed_mod_factor, 10.);
+    time.set_relative_speed(rate);
 }
 
 pub fn exit_system(keys: Res<ButtonInput<KeyCode>>, mut exit: EventWriter<AppExit>) {
@@ -479,16 +481,10 @@ pub fn camera_spawn(mut commands: Commands) {
 // sum gravitational forces on bodies to arrive at their acceleration, euler integrate acceleration to modify velocity
 pub fn update_body_velocities(
     mut query: Query<(&Body, &Position, &mut Velocity)>,
-    time: Res<Time>,
-    paused: Res<TimePaused>,
-    time_rate: Res<TimeRate>,
+    time: Res<Time<Virtual>>,
     config: Res<Configuration>,
 ) {
-    let dt = if paused.0 {
-        0.
-    } else {
-        time.delta_seconds() * time_rate.0
-    };
+    let dt = time.delta_seconds();
     let mut query_next = query.iter_combinations_mut();
     while let Some([(body1, &p1, mut v1), (body2, &p2, mut v2)]) = query_next.fetch_next() {
         let m1 = body1.mass;
@@ -506,15 +502,9 @@ pub fn update_body_velocities(
 // euler integrate body velocities to update body positions
 pub fn update_body_positions(
     mut query: Query<(&mut Position, &Velocity)>,
-    time: Res<Time>,
-    paused: Res<TimePaused>,
-    time_rate: Res<TimeRate>,
+    time: Res<Time<Virtual>>,
 ) {
-    let dt = if paused.0 {
-        0.
-    } else {
-        time.delta_seconds() * time_rate.0
-    };
+    let dt = time.delta_seconds();
     query.iter_mut().for_each(|(mut position, velocity)| {
         position.0.x += velocity.0.x * dt;
         position.0.y += velocity.0.y * dt;
