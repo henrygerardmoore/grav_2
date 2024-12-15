@@ -3,7 +3,7 @@ use bevy::{
     input::mouse::{MouseMotion, MouseWheel},
     math::NormedVectorSpace,
     prelude::*,
-    window::{CursorGrabMode, PrimaryWindow},
+    window::PrimaryWindow,
 };
 
 use crate::resources::{BodySpawningOptions, SpawnSelectionMode, SphereInfo};
@@ -16,9 +16,10 @@ use crate::{
     helpers::{get_mass, get_radius},
 };
 
-pub fn text_section(color: Color, value: &str) -> TextSection {
-    TextSection::new(
+pub fn text_section(color: Color, value: &str) -> Text {
+    Text::new(
         value,
+        
         TextStyle {
             font_size: 40.0,
             color,
@@ -225,28 +226,19 @@ pub fn reset_camera(
     }
 }
 
-#[derive(Resource, Clone, Copy, Default)]
-pub struct LastFrameUnlocked(u32);
-
 pub fn capture_or_release_cursor(
     mut window: Query<&mut Window, With<PrimaryWindow>>,
     frames: Res<FrameCount>,
     mut time: ResMut<Time<Virtual>>,
-    mut last_frame_unlocked: ResMut<LastFrameUnlocked>,
 ) {
-    // https://github.com/bevyengine/bevy/issues/16238
-    // wait for a bit before capturing the cursor
-    if frames.0 >= 10 && frames.0 - last_frame_unlocked.0 > 20 {
+    if frames.0 >= 10 {
         let mut primary_window = window.single_mut();
         if primary_window.focused {
-            primary_window.cursor.visible = false;
-            primary_window.cursor.grab_mode = CursorGrabMode::Locked;
-            primary_window.mode = bevy::window::WindowMode::Fullscreen;
+            primary_window.cursor_options.visible = false;
+            primary_window.mode = bevy::window::WindowMode::Fullscreen(MonitorSelection::Primary);
         } else {
-            last_frame_unlocked.0 = frames.0;
-            primary_window.cursor.grab_mode = CursorGrabMode::None;
-            primary_window.mode = bevy::window::WindowMode::BorderlessFullscreen;
-            primary_window.cursor.visible = true;
+            primary_window.cursor_options.visible = true;
+            primary_window.mode = bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Primary);
             time.pause();
         }
     }
@@ -360,7 +352,7 @@ pub fn move_camera(
     if keys.pressed(KeyCode::AltLeft) {
         speed_mod /= config.speed_mod_factor;
     }
-    let motion_distance = time.delta_seconds() * config.camera_speed * speed_mod;
+    let motion_distance = time.delta_secs() * config.camera_speed * speed_mod;
     let mut transform = camera.single_mut();
     let mut net_translation = Vec3::ZERO;
     if keys.pressed(KeyCode::KeyW) {
@@ -484,7 +476,7 @@ pub fn update_body_velocities(
     time: Res<Time<Virtual>>,
     config: Res<Configuration>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     let mut query_next = query.iter_combinations_mut();
     while let Some([(body1, &p1, mut v1), (body2, &p2, mut v2)]) = query_next.fetch_next() {
         let m1 = body1.mass;
@@ -504,7 +496,7 @@ pub fn update_body_positions(
     mut query: Query<(&mut Position, &Velocity)>,
     time: Res<Time<Virtual>>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     query.iter_mut().for_each(|(mut position, velocity)| {
         position.0.x += velocity.0.x * dt;
         position.0.y += velocity.0.y * dt;

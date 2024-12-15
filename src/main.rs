@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::{fs::File, io::Read, path::PathBuf};
 
-use bevy::{prelude::*, window::Cursor};
+use bevy::{prelude::*, window::CursorOptions};
 
 mod components;
 mod config;
@@ -61,8 +61,8 @@ fn main() {
                     primary_window: Some(Window {
                         title: "Henry's 3D N-body gravity sim!".into(),
                         name: Some("grav_2.app".into()),
-                        mode: bevy::window::WindowMode::Fullscreen,
-                        cursor: Cursor {
+                        mode: bevy::window::WindowMode::Fullscreen(MonitorSelection::Primary),
+                        cursor_options: CursorOptions {
                             visible: false,
                             ..default()
                         },
